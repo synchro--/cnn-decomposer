@@ -1,9 +1,10 @@
 '''
-A personal collection of PyTorch utils for Deep Learning.
+A personal draft collection of PyTorch utils for Deep Learning.
 To split eventually into different modules.
 ---------
 A. Salman
 '''
+
 # pytorch
 from torch.nn.modules.module import _addindent
 import torch
@@ -18,7 +19,7 @@ import torchvision.transforms as transforms
 # Utils
 import numpy as np
 import matplotlib.pyplot as plt
-from logger import Logger
+# from logger import Logger
 import scipy.io as sio
 import os
 import time
@@ -257,13 +258,13 @@ def set_layer_weights(layer, tensor):
 # Helper function to save weights in MAT format
 def save_weigths_to_mat(allweights, save_dir):
     """
-    Helper function to save model weights to .mat files 
-    So that they can be used inside Maltab tensor toolboxes like 
-    Tensorlab. 
+    Helper function to save model weights to .mat files
+    So that they can be used inside Maltab tensor toolboxes like
+    Tensorlab.
 
     Args:
         allweights: (list) a list in which each member is itself a list containing a pair of values [weights, bias] for each layer
-        save_dir: (string) directory to save the files. 
+        save_dir: (string) directory to save the files.
     """
     for idx, weights in enumerate(allweights):
         name = os.path.join(save_dir, "conv" + str(

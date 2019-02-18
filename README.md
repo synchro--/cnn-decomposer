@@ -1,4 +1,4 @@
-****## Tensor Decomposition Workspace
+## Tensor Decomposition Workspace
 Testing methods to decompose convolutional layer into 3/4 optimized sub-layers which squeeze the model into a much lighter one. 
 
 ## Goal
@@ -59,4 +59,4 @@ All of this must be done regardless of the decomposition method, so the method c
 2. create function to decompose all layers, looping on the previous one 
 3. create function to decompose_and_finetune that decomposes the layer and finetune the whole network (but fine-tuning should be an indepentent task)
     - same versions as 1. 
-- create function to dec
+    - create function to dec

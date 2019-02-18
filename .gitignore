@@ -11,6 +11,9 @@ data/
 checkpoints/
 *.pth
 
+# tensorboard logs 
+*.tf 
+
 
 # Distribution / packaging
 .Python

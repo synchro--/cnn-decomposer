@@ -14,8 +14,8 @@ import torchvision
 from torchvision import datasets, models
 
 # PyTorch Utils
-from pytorch_utils import *
-from logger import Logger
+from utils.pytorch_utils import *
+from utils.logger import Logger
 from models.metrics import accuracy
 
 # Generic

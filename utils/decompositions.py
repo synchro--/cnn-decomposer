@@ -5,25 +5,25 @@ import torch
 import torch.nn as nn
 from VBMF import VBMF
 
-from pytorch_utils import *
+from utils.pytorch_utils import *
 
 # Returns tuned ranks according to the desired compression factor
 def choose_compression(layer, ranks, compression_factor=2, flag='Tucker2'):
     '''
-    Compute tuned ranks according to the desired compression 
-    factor. Sometimes VBMF returns too large ranks; hence the 
-    decomposition makes the layer bigger instead of shrinking it. 
-    This function prevents it. 
+    Compute tuned ranks according to the desired compression
+    factor. Sometimes VBMF returns too large ranks; hence the
+    decomposition makes the layer bigger instead of shrinking it.
+    This function prevents it.
     N.B. by default, if the compression is higher than 2
     the ranks will be untouched.
 
     Args:
         layer: the layer to be compressed
-        ranks : estimated ranks 
+        ranks : estimated ranks
         compression_factor: how much the layer will compressed
-        flag: string, choose compression over different decompositions. 
-              default is Tucker. 
-    Returns: 
+        flag: string, choose compression over different decompositions.
+              default is Tucker.
+    Returns:
         the newly estimated rank according to desired compression
     '''
     # PyTorch format is [OUT, IN, k1, k2]
@@ -36,10 +36,10 @@ def choose_compression(layer, ranks, compression_factor=2, flag='Tucker2'):
         compression = ((d**2) *S* T) / ((S*ranks[0] + ranks[0]*ranks[1] * (d**2) + T*ranks[1]) )
         ranks[0] = ranks[0] * 3
         print(compression)
-    
+
         # compression must be 2 or more, otherwise arbitrary ranks will be chosen!
-        if compression <= 2: 
-            while compression <= compression_factor:         
+        if compression <= 2:
+            while compression <= compression_factor:
                 '''
                 cumulative_rank = ((d**2) *S*T) / (compression_factor*(S/2 + (d**2) + T))
                 split_ratio = 0.7 # should be < 0.5
@@ -55,21 +55,21 @@ def choose_compression(layer, ranks, compression_factor=2, flag='Tucker2'):
         # Log compression factors and number of weights
         log_compression(weights, compression)
 
-    
+
     elif flag == 'cpd':
         rank = ranks[0] # it is a single value
         compression = ((d**2)*T*S) / (rank*(S+2*d+T))
         if compression <= compression_factor:
             rank = ((d**2) * S * T) / (compression_factor * (S +2*d+ T))
-            ranks[0] = np.floor(rank).astype(int) 
+            ranks[0] = np.floor(rank).astype(int)
 
-            # recompute new compression ratio 
+            # recompute new compression ratio
             compression_factor = ((d**2) * S * T) / (rank * (S +2*d+ T))
             print('compression factor for layer {} : {}'.format(
                 weights.shape, compression_factor))
             # Log compression factors and number of weights
             log_compression(weights, compression_factor)
-            
+
         else:
             # Log the standard compression
             log_compression(weights, compression)
@@ -138,11 +138,11 @@ def SVD_weights(weights, t):
     Vt = V[:t, :]
 
     L = np.dot(np.diag(Sigma), Vt)
-    return U, L 
+    return U, L
 
 def FC_SVD_compression(layer):
     """
-    Compress a FC layer applying SVD 
+    Compress a FC layer applying SVD
     """
     # trunc = layer.weight.data.numpy().shape[0]
     trunc = 15
@@ -163,7 +163,7 @@ def FC_SVD_compression(layer):
 
 def conv1x1_SVD_compression(layer):
     """
-    Compress a 1x1 conv layer applying SVD 
+    Compress a 1x1 conv layer applying SVD
     """
     # trunc = layer.weight.data.numpy().shape[0]
     trunc = 15
@@ -184,7 +184,7 @@ def conv1x1_SVD_compression(layer):
                             padding=0,
                             dilation=layer.dilation,
                             bias=True)
-    second.bias.data = bias 
+    second.bias.data = bias
 
 
     W = W.T
@@ -196,7 +196,7 @@ def conv1x1_SVD_compression(layer):
         np.expand_dims(weights1.T, axis=-1), axis=-1)
     second_weights = np.expand_dims(np.expand_dims(
         weights2.T, axis=-1), axis=-1)
-    
+
     print(first)
     print(first_weights.shape)
 
@@ -219,9 +219,9 @@ def cp_decomposition_conv_layer(layer, rank, matlab=False):
     size = max(X.shape)
     # Using the SVD init gives better results, but stalls for large matrices.
 
-    if matlab: 
+    if matlab:
         last, first, vertical, horizontal = load_cpd_weights('dumps/TODO.mat')
-    
+
     else:
         if size >= 256:
             print("Init random")
@@ -304,7 +304,7 @@ def cp_decomposition_conv_layer(layer, rank, matlab=False):
 
 
 def cp_decomposition_conv_layer_BN(layer, rank, matlab=False):
-    """ Gets a conv layer and a target rank, 
+    """ Gets a conv layer and a target rank,
         returns a nn.Sequential object with the decomposition """
 
     # Perform CP decomposition on the layer weight tensor.
@@ -317,8 +317,8 @@ def cp_decomposition_conv_layer_BN(layer, rank, matlab=False):
             'dumps/TODO.mat')
 
     else:
-        # using a random initializaer is better for very large matrices 
-        # SVD is a bit quicker on smaller ones 
+        # using a random initializaer is better for very large matrices
+        # SVD is a bit quicker on smaller ones
         if size >= 256:
             print("Init random")
             last, first, vertical, horizontal = parafac(
@@ -400,7 +400,7 @@ def cp_decomposition_conv_layer_BN(layer, rank, matlab=False):
 
 
 def tucker_decomposition_conv_layer(layer):
-    """ Gets a conv layer, 
+    """ Gets a conv layer,
         returns a nn.Sequential object with the Tucker decomposition.
         The ranks are estimated with a Python implementation of VBMF
         https://github.com/CasvandenBogaard/VBMF
@@ -455,9 +455,9 @@ def tucker_decomposition_conv_layer(layer):
     return nn.Sequential(*new_layers)
 
 
-# Tucker e stabile anche senza BNs. 
+# Tucker e stabile anche senza BNs.
 def tucker_decomposition_conv_layer_BN(layer):
-    """ Gets a conv layer, 
+    """ Gets a conv layer,
         returns a nn.Sequential object with the Tucker decomposition.
         The ranks are estimated with a Python implementation of VBMF
         https://github.com/CasvandenBogaard/VBMF
@@ -559,13 +559,13 @@ def tucker_xavier(layer):
         # Xavier init:
     for l in new_layers:
         xavier_weights2(l)
-    
+
     return nn.Sequential(*new_layers)
 
-    
-# NB THIS DOES NOT MAKE MUCH SENSE 
+
+# NB THIS DOES NOT MAKE MUCH SENSE
 def cp_xavier_conv_layer(layer, rank):
-    """ Gets a conv layer and a target rank, 
+    """ Gets a conv layer and a target rank,
         returns a nn.Sequential object with the decomposition """
 
     # Perform CP decomposition on the layer weight tensor.

@@ -1,22 +1,33 @@
+# pytorch core 
 import torch
+from torch.autograd import Variable
+from torchvision import models
 import torchvision
-import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-from logger import Logger
+import torch.optim as optim
 from torch.optim import lr_scheduler
-import argparse
-
-from dataloaders import dataset  # Load datasets
-
-import matplotlib.pyplot as plt
-import numpy as np
-from pytorch_utils import *
-from training_algo import *
-from models.custom_models import *
 from torchsummary import summary
 
+# pytorch utils 
+from utils import decompositions
+from utils.pytorch_utils import *
+from utils.training_algo import *
+
+# others 
+import sys
+import numpy as np
+import time
+import argparse
+import subprocess
+
+from dataloaders import dataset
+from operator import itemgetter
+import tensorly as tl
+from itertools import chain
+
+# da modificare e rimodulare
+from models.custom_models import *
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -70,9 +81,9 @@ class Net(nn.Module):
 # net = Net()
 # net = torch.load(model_file)
 # net = NIN_BN()
-# net = CPD_All_Conv(int(args.ranks[0]), int(args.ranks[1]), int(args.ranks[2]), relu=False)
+net = CPD_All_Conv(int(args.ranks[0]), int(args.ranks[1]), int(args.ranks[2]), relu=False)
 # net = Keras_Cifar_classic()
-net = LenetZhang()
+# net = LenetZhang()
 # net = CPD_Zhang(int(args.ranks[0]), int(args.ranks[1]), int(args.ranks[2]), relu=False)
 
 # GPU

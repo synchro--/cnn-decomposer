@@ -53,7 +53,7 @@ def choose_compression(layer, ranks, compression_factor=2, flag='Tucker2'):
         print('compression factor for layer {} : {}'.format(
             weights.shape, compression))
         # Log compression factors and number of weights
-        log_compression(weights, compression)
+        # log_compression(weights, compression)
 
 
     elif flag == 'cpd':
@@ -68,11 +68,11 @@ def choose_compression(layer, ranks, compression_factor=2, flag='Tucker2'):
             print('compression factor for layer {} : {}'.format(
                 weights.shape, compression_factor))
             # Log compression factors and number of weights
-            log_compression(weights, compression_factor)
+            # log_compression(weights, compression_factor)
 
         else:
             # Log the standard compression
-            log_compression(weights, compression)
+            # log_compression(weights, compression)
             print('compression factor for layer {} : {}'.format(
                 weights.shape, compression))
     else:
@@ -321,11 +321,12 @@ def cp_decomposition_conv_layer_BN(layer, rank, matlab=False):
         # SVD is a bit quicker on smaller ones
         if size >= 256:
             print("Init random")
-            last, first, vertical, horizontal = parafac(
-                X, rank=rank, init='random')
+            _, factors = parafac(X, rank=rank, init='random')
+            last, first, vertical, horizontal = factors
         else:
-            last, first, vertical, horizontal = parafac(
-                X, rank=rank, init='svd')
+            _, factors = parafac(X, rank=rank, init='svd')
+            last, first, vertical, horizontal = factors
+            
 
     pointwise_s_to_r_layer = torch.nn.Conv2d(in_channels=first.shape[0],
                                              out_channels=first.shape[1],
@@ -411,7 +412,7 @@ def tucker_decomposition_conv_layer(layer):
     print(layer, "VBMF Estimated ranks", ranks)
     core, [last, first] = \
         partial_tucker(layer.weight.data.numpy(),
-                       modes=[0, 1], ranks=ranks, init='svd')
+                       modes=[0, 1], rank=ranks, init='svd')
 
     # A pointwise convolution that reduces the channels from S to R3
     first_layer = torch.nn.Conv2d(in_channels=first.shape[0],
@@ -467,7 +468,7 @@ def tucker_decomposition_conv_layer_BN(layer):
     print(layer, "VBMF Estimated ranks", ranks)
     core, [last, first] = \
         partial_tucker(layer.weight.data.numpy(),
-                       modes=[0, 1], ranks=ranks, init='svd')
+                       modes=[0, 1], rank=ranks, init='svd')
 
     # A pointwise convolution that reduces the channels from S to R3
     first_layer = torch.nn.Conv2d(in_channels=first.shape[0],
@@ -522,7 +523,7 @@ def tucker_xavier(layer):
     print(layer, "VBMF Estimated ranks", ranks)
     core, [last, first] = \
         partial_tucker(layer.weight.data.numpy(),
-                       modes=[0, 1], ranks=ranks, init='svd')
+                       modes=[0, 1], rank=ranks, init='svd')
 
     # A pointwise convolution that reduces the channels from S to R3
     first_layer = torch.nn.Conv2d(in_channels=first.shape[0],

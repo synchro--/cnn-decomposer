@@ -113,15 +113,15 @@ def train_model_val(model, dataloaders, criterion, optimizer, scheduler, epochs=
                 }
 
                 # (2) Log CSV file
-                logger.log_csv(epoch, metrics['accuracy'], metrics['loss'])
+                # logger.log_csv(epoch, metrics['accuracy'], metrics['loss'])
                 # (3) Tensorboard specific logging
-                logger.tensorboard_log(epoch, model, metrics)
+                # logger.tensorboard_log(epoch, model, metrics)
 
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
                 print('Acc improved from %.3f to %.3f'
                       % (best_acc, epoch_acc))
-                logger.log_test(epoch, epoch_acc)
+                # logger.log_test(epoch, epoch_acc)
 
                 print('Saving model to ' + model_filename + "...\n")
                 best_acc = epoch_acc
@@ -173,7 +173,8 @@ def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_th
     switched_opt = False
 
     # Here we store the best model
-    dirname = os.path.dirname(__file__)
+    filepath = os.path.dirname(__file__)
+    dirname = os.path.abspath(os.path.join(filepath, os.pardir))
     wts_filename = 'checkpoints/just_trained.pth.tar'
     model_filename = 'checkpoints/best.pth'
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -253,10 +254,9 @@ def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_th
 
                 # (2) Log CSV file
                 print('logging...')
-                logger.log_csv(
-                    total_step, metrics['accuracy'], metrics['loss'])
+                # logger.log_csv(total_step, metrics['accuracy'], metrics['loss'])
                 # (3) Tensorboard specific logging
-                logger.tensorboard_log(total_step, model, metrics)
+                # logger.tensorboard_log(total_step, model, metrics)
 
                 # save checkpoint
                 save_checkpoint(model.state_dict(),
@@ -311,7 +311,7 @@ def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_th
                         plateau_counter += 1
 
                     # log test val
-                    logger.log_test(total_step, best_test_acc)
+                    # logger.log_test(total_step, best_test_acc)
 
                     # switch back model
                     model.train(True)  # Set model to training mode

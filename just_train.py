@@ -54,7 +54,7 @@ retrain = False
 # 1. load datasets
 trainloader = dataset.cifar10_trainloader(
     batch_size=32, num_workers=0, augment=True, pin_memory=True)
-testloader = dataset.cifar10_testloader(batch_size=32, num_workers=0)
+testloader = dataset.cifar10_testloader(batch_size=10000, num_workers=0)
 
 
 class Net(nn.Module):
@@ -70,18 +70,20 @@ class Net(nn.Module):
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
+        # x = x.view(-1, 16 * 5 * 5)
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
 
 
+net = cohere_thn()
 # net = Keras_Cifar_Separable(20, 5)
 # net = Net()
 # net = torch.load(model_file)
 # net = NIN_BN()
-net = CPD_All_Conv(int(args.ranks[0]), int(args.ranks[1]), int(args.ranks[2]), relu=False)
+# net = CPD_All_Conv(int(args.ranks[0]), int(args.ranks[1]), int(args.ranks[2]), relu=False)
 # net = Keras_Cifar_classic()
 # net = LenetZhang()
 # net = CPD_Zhang(int(args.ranks[0]), int(args.ranks[1]), int(args.ranks[2]), relu=False)
@@ -124,7 +126,7 @@ else:
 #
 
 if args.val:
-    loaders = get_train_valid_loader(data_dir='./data', batch_size=32, augment=False,
+    loaders = get_train_valid_loader(data_dir='./data', batch_size=10000, augment=False,
                                      random_seed=7)
     dataloaders = {'train': loaders[0], 'val': loaders[1]}
     net = train_model_val(dataloaders, net, criterion,
@@ -136,6 +138,6 @@ else:
 
 # dump_model_weights(net)
 
-torch.save(net, "just_TR.pth")
+torch.save(net, "cohere_trained.pth")
 net.train(False)
 test_model_cifar10(testloader, net)

@@ -401,7 +401,6 @@ def _choose_compression(layer, ranks, compression_factor=2, flag='Tucker2', fram
     N.B. by default, if the compression is higher than 2
     the ranks selected by VBMF will be untouched.
 
-
     Args:
         layer: the layer to be compressed
         ranks : estimated ranks

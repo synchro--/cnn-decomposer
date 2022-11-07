@@ -29,43 +29,6 @@ from itertools import chain
 # da modificare e rimodulare
 from models.custom_models import *
 
-# hyperparams
-rank1 = 20
-rank2 = 5
-
-kern = 3  # for all layers
-last_kern = 6
-filt_size1 = 32
-filt_size2 = 64
-filt_fc1 = 512
-num_classes = 10
-
-# VGG16 based network for classifying between dogs and cats.
-# After training this will be an over parameterized network,
-# with potential to shrink it.
-
-class ModifiedVGG16Model(torch.nn.Module):
-    def __init__(self, model=None):
-        super(ModifiedVGG16Model, self).__init__()
-
-        model = models.VGG16(pretrained=True)
-        self.features = model.features
-
-        self.classifier = nn.Sequential(
-            nn.Dropout(),
-            nn.Linear(25088, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096, 2))
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
-
 ### Trainer ###
 ###############
 class Trainer:
@@ -75,37 +38,35 @@ class Trainer:
         # self.train_data_loader = dataset.cifar10_trainloader()
         self.train_data_loader, self.valid_data_loader = get_train_valid_loader(data_dir='./data',
          batch_size=32, augment=False, random_seed=7)
-        self.test_data_loader = dataset.cifar10_testloader()
+        self.test_data_loader = dataset.cifar10_testloader(batch_size=32)
 
         self.optimizer = optimizer
 
         self.model = model
         self.criterion = torch.nn.CrossEntropyLoss()
         self.model.train()
-
+    
+    # Compute accuracy
     def test(self):
-        self.model.cuda()
-        # self.model.eval()
+        # self.model.cuda()
+        self.model.eval()
         correct = 0
         total = 0
-        total_time = 0
-        for i, (batch, label) in enumerate(self.test_data_loader):
+        for _, (batch, label) in enumerate(self.test_data_loader):
             batch = batch.cuda()
-            t0 = time.time()
-            output = model(Variable(batch)).cpu()
-            t1 = time.time()
-            total_time = total_time + (t1 - t0)
+            output = self.model(Variable(batch)).cpu()
             pred = output.data.max(1)[1]
             correct += pred.cpu().eq(label).sum()
             total += label.size(0)
-
-        print("Accuracy : %.4f" % (float(correct) / total))
-        print("Average prediction time %.4f %d" % (float(total_time) / (i + 1), i + 1))
-
+            
+        accuracy = (float(correct) / total)
+        print(f"Accuracy: {accuracy:.4f}")
+        return accuracy
+        
+        
+    def train(self, epochs=10):
         self.model.train()
-
-    def train(self, epoches=10):
-        for i in range(epoches):
+        for i in range(epochs):
             print("Epoch: ", i)
             self.train_epoch()
             self.test()
@@ -121,6 +82,43 @@ class Trainer:
     def train_epoch(self):
         for i, (batch, label) in enumerate(self.train_data_loader):
             self.train_batch(batch.cuda(), label.cuda())
+    
+    def compute_eval_metrics(self, n_samples):
+        # TODO: add code to compute the time for inference.
+        duration_list = []
+        accuracy_list = []
+        for _ in range(n_samples):
+            start = time.time()
+            # TODO: add code to correctly compute the accuracy on a given batch.
+            # Controlla quel discorso su autobatch qui! 
+            acc = self.test()
+            duration = time.time() - start
+            duration_list.append(duration)
+            accuracy_list.append(acc)
+
+        return accuracy_list, duration_list
+    
+    # Compute accuracy
+    def accuracy_and_avg_time(self):
+        # self.model.cuda()
+        self.model.eval()
+        correct = 0
+        total = 0
+        total_time = 0
+        for i, (batch, label) in enumerate(self.test_data_loader):
+            batch = batch.cuda()
+            t0 = time.time()
+            output = self.model(Variable(batch)).cpu()
+            t1 = time.time()
+            total_time = total_time + (t1 - t0)
+            pred = output.data.max(1)[1]
+            correct += pred.cpu().eq(label).sum()
+            total += label.size(0)
+
+        print("Accuracy : %.4f" % (float(correct) / total))
+        print("Average prediction time %.4f %d" % (float(total_time) / (i + 1), i + 1))
+
+        self.model.train()
 
 ### get args ###
 def get_args():
@@ -145,7 +143,7 @@ def get_args():
     args = parser.parse_args()
     return args
 
-
+# Only for sequential
 def decompose_model_seq(model, layer_name, model_file):
     print(model)
     model.cpu()
@@ -154,7 +152,6 @@ def decompose_model_seq(model, layer_name, model_file):
         ## as long as there are not 2 homonimous layers
         if layer_name in name:
             print(name)
-
             if args.cp:
                 rank = max(conv_layer.weight.data.shape) // 3
                 rank, _ = choose_compression(
@@ -175,7 +172,7 @@ def decompose_model_seq(model, layer_name, model_file):
     torch.save(model, model_file)
     return model
 
-def decompose_model(model, layer_name, model_file):
+def decompose_model(args, model, layer_name, model_file):
     print(model)
     model.cpu()
     complete_name = ""
@@ -188,26 +185,26 @@ def decompose_model(model, layer_name, model_file):
                 # if CONV 1X1
                 if conv_layer.weight.shape[2] == conv_layer.weight.shape[3] == 1:
                     print('1x1 layer, hard to make it converge...')
-                    decomposed = conv1x1_SVD_compression(conv_layer)
+                    decomposed = decompositions.conv1x1_SVD_compression(conv_layer)
                 else:
                     # NORMAL LAYER
                     print(name)
                     complete_name = name
                     if args.cp:
-                        rank = cp_ranks(conv_layer)
+                        rank = decompositions.cp_ranks(conv_layer)
                         print('rank: ', rank)
 
                         rank = max(conv_layer.weight.data.shape) // 3
-                        rank, _ = choose_compression(conv_layer, ranks=[rank, rank], compression_factor = 52, flag='cpd')
+                        rank, _ = decompositions.choose_compression(conv_layer, ranks=[rank, rank], compression_factor = 52, flag='cpd')
                         print('rank: ', rank)
                         if name == 'conv2':
                             matlab=True
                         else:
                             matlab = False
-                        decomposed = cp_decomposition_conv_layer_BN(conv_layer, rank, matlab=False)
+                        decomposed = decompositions.cp_decomposition_conv_layer_BN(conv_layer, rank, matlab=False)
                         # decomposed = cp_xavier_conv_layer(conv_layer, rank)
                     else:
-                        decomposed = tucker_decomposition_conv_layer(conv_layer)
+                        decomposed = decompositions.tucker_decomposition_conv_layer(conv_layer)
                         # decomposed = tucker_xavier(conv_layer)
 
         model._modules[complete_name] = decomposed ## WARNING: IF USING SEQUENTIAL WE NEED THE FULL NAME: e.g. sequential.conv1
@@ -217,7 +214,7 @@ def decompose_model(model, layer_name, model_file):
             if layer_name in name:
                 print('Decomposing FC layer' + name)
                 complete_name = name
-                decomposed_fc = FC_SVD_compression(fc_layer)
+                decomposed_fc = decompositions.FC_SVD_compression(fc_layer)
 
         model._modules[complete_name] = decomposed_fc
 
@@ -225,19 +222,30 @@ def decompose_model(model, layer_name, model_file):
     torch.save(model, model_file)
     return model
 
-
-if __name__ == '__main__':
+def main():
     args = get_args()
     tl.set_backend('numpy')
     input_sz = (1, 32, 32)
+    
+    DEBUG = 0
+
+    if DEBUG:
+        import ptvsd
+        print("Waiting for debugger attach")
+        ptvsd.enable_attach(address=('localhost', 5678), redirect_output=True)
+        ptvsd.wait_for_attach()
+        print("debugger attached")
 
     if args.train:
-        model = ModifiedVGG16Model().cuda()
-        optimizer = optim.SGD(model.classifier.parameters(), lr=0.0001, momentum=0.99)
+        model = cohere_thn().cuda()
+        optimizer = optim.SGD(model.parameters(), lr=0.0001, momentum=0.99)
         trainer = Trainer(args.train_path, args.test_path, model, optimizer)
 
-        trainer.train(epoches = 10)
-        torch.save(model, "model")
+        trainer.train(epochs = 5)
+        test_accuracy, latency = trainer.compute_eval_metrics(n_samples=50)
+        print(test_accuracy)
+        print(latency)
+        torch.save(model, "cohere_model.pth")
 
     # Decompose all the specified layers without fine-tuning
     # Save the architecture in "full_decomposed.pth"
@@ -254,7 +262,7 @@ if __name__ == '__main__':
         layers = args.layers
 
         for i, layer in enumerate(layers):
-            dec = decompose_model(model, layer, 'decomposed_model.pth')
+            dec = decompose_model(args, model, layer, 'decomposed_model.pth')
             for param in dec.parameters():
                 param.requires_grad = True
             print(summary(dec, input_size=input_sz))
@@ -339,8 +347,8 @@ if __name__ == '__main__':
             subprocess.call(cmd2.split())
 
 
-# Save last model
-torch.save(dec, 'finetuned.pth')
+        # Save last model
+        torch.save(dec, 'finetuned.pth')
 
-
-
+if __name__ == '__main__':
+    main()

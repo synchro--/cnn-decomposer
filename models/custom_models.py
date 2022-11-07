@@ -15,32 +15,29 @@ from collections import OrderedDict
 # Network for CIFAR10 as defined in Keras tutorials
 class cohere_thn(nn.Module):
     def __init__(self):
-        super(Keras_Cifar_classic, self).__init__()
+        super(cohere_thn, self).__init__()
 
         self.conv1 = nn.Conv2d(3, 6*3, 5, padding='valid')
         self.conv2 = nn.Conv2d(6*3, 16*3, 5, padding='valid')
-
-        self.pool = nn.AvgPool2d(kernel_size=(2,2), stride=(2,2), padding='VALID')
-
-        self.dropout_1 = nn.Dropout2d(0.25)
-        self.dropout_2 = nn.Dropout2d(0.25)
+        self.pool = nn.AvgPool2d(kernel_size=(2,2), stride=(2,2)) #, padding=(0,0))
 
         # fully connected
-        self.fc1 = nn.Linear(64 * 6 * 6, 3000)
+        self.fc1 = nn.Linear(1200, 3000)
         self.fc2 = nn.Linear(3000, 2000)
         self.fc3 = nn.Linear(2000, 2000)
-        self.fc4 = nn.Linear(1000, 10)
-        self.classifier = nn.Linear(10,10)
+        self.fc4 = nn.Linear(2000, 1000)
+        self.fc5 = nn.Linear(1000, 10)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1) # flatten all dimensions except batch
-        print(x.shape)
+
         x = self.fc1(x)
         x = self.fc2(x)
         x = self.fc3(x)
         x = self.fc4(x)
+        x = self.fc5(x)
 
         return x
 
@@ -695,6 +692,32 @@ class CPD_All_Conv(nn.Module):
         x = x.view(-1, 10)  # Flatten! <---
         return x
 
+
+# VGG16 based network for classifying between dogs and cats.
+# After training this will be an over parameterized network,
+# with potential to shrink it.
+
+class ModifiedVGG16Model(torch.nn.Module):
+    def __init__(self, model=None):
+        super(ModifiedVGG16Model, self).__init__()
+
+        model = torch.models.vgg16(pretrained=True)
+        self.features = model.features
+
+        self.classifier = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(512, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 2))
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
 
 # Network for CIFAR10 as defined in Keras tutorials
 class Keras_Cifar_classic(nn.Module):

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TensorPress — Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #22c55e;
+    --accent4: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    padding: 40px 32px;
+    overflow-x: hidden;
+  }
+
+  /* Subtle grid texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    max-width: 1100px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    margin-bottom: 48px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 3px 10px;
+    margin-bottom: 16px;
+    opacity: 0.8;
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: #fff;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── USER FLOW ─────────────────────────────────────────────── */
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-bottom: 56px;
+    position: relative;
+  }
+
+  .flow-step {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px 18px;
+    position: relative;
+    transition: border-color 0.2s;
+  }
+
+  .flow-step:hover { border-color: var(--accent); }
+
+  .flow-step::after {
+    content: '→';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 18px;
+    z-index: 2;
+    background: var(--bg);
+    padding: 0 2px;
+  }
+
+  .flow-step:last-child::after { display: none; }
+
+  .step-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    margin-bottom: 8px;
+    letter-spacing: 0.15em;
+  }
+
+  .step-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+
+  .step-code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    background: rgba(0,229,255,0.06);
+    border: 1px solid rgba(0,229,255,0.15);
+    padding: 6px 8px;
+    margin-top: 8px;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  /* ── ARCHITECTURE LAYERS ───────────────────────────────────── */
+  .arch {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 56px;
+  }
+
+  .layer {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .layer-header {
+    padding: 10px 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .layer-header .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .layer-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .module {
+    border: 1px solid;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.05em;
+    position: relative;
+    cursor: default;
+    transition: background 0.2s;
+  }
+
+  .module:hover { opacity: 0.8; }
+
+  .module.sub {
+    font-size: 10px;
+    font-weight: 400;
+    border-style: dashed;
+    opacity: 0.7;
+  }
+
+  /* color themes per layer */
+  .l-public .dot { background: var(--accent); }
+  .l-public .layer-header { color: var(--accent); }
+  .l-public .module { color: var(--accent); border-color: rgba(0,229,255,0.35); background: rgba(0,229,255,0.04); }
+
+  .l-config .dot { background: var(--accent4); }
+  .l-config .layer-header { color: var(--accent4); }
+  .l-config .module { color: var(--accent4); border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.04); }
+
+  .l-core .dot { background: var(--accent2); }
+  .l-core .layer-header { color: var(--accent2); }
+  .l-core .module { color: var(--accent2); border-color: rgba(124,58,237,0.35); background: rgba(124,58,237,0.04); }
+
+  .l-backend .dot { background: var(--accent3); }
+  .l-backend .layer-header { color: var(--accent3); }
+  .l-backend .module { color: var(--accent3); border-color: rgba(34,197,94,0.35); background: rgba(34,197,94,0.04); }
+
+  .l-utils .dot { background: var(--muted); }
+  .l-utils .layer-header { color: var(--muted); }
+  .l-utils .module { color: var(--muted); border-color: rgba(100,116,139,0.35); background: rgba(100,116,139,0.04); }
+
+  /* ── FILE TREE ─────────────────────────────────────────────── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+  }
+
+  .card-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .tree {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    line-height: 1.9;
+    color: var(--text);
+  }
+
+  .tree .dir { color: var(--accent4); font-weight: 600; }
+  .tree .file { color: var(--text); }
+  .tree .file.highlight { color: var(--accent); }
+  .tree .file.new { color: var(--accent3); }
+  .tree .comment { color: var(--muted); font-size: 10px; }
+
+  /* ── AGENT TABLE ───────────────────────────────────────────── */
+  .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 48px;
+  }
+
+  .agent-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+
+  .agent-card:hover { border-color: var(--accent2); }
+
+  .agent-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent2);
+    margin-bottom: 6px;
+  }
+
+  .agent-scope {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .tag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border: 1px solid;
+    margin-top: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  .tag.refactor { color: var(--accent4); border-color: rgba(245,158,11,0.4); }
+  .tag.new { color: var(--accent3); border-color: rgba(34,197,94,0.4); }
+  .tag.test { color: var(--danger); border-color: rgba(239,68,68,0.4); }
+  .tag.docs { color: var(--accent); border-color: rgba(0,229,255,0.4); }
+
+  /* connector lines between layers */
+  .connector {
+    display: flex;
+    justify-content: center;
+    color: var(--border);
+    font-size: 18px;
+    margin: -6px 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="badge">Library Architecture</div>
+    <h1>Tensor<span>Press</span></h1>
+    <p class="subtitle">// Tucker &amp; CPD compression for conv layers — framework-agnostic roadmap</p>
+  </header>
+
+  <!-- ── USER FLOW ───────────────────────────────────── -->
+  <p class="section-label">// 01 — User Flow</p>
+  <div class="flow-row">
+    <div class="flow-step">
+      <div class="step-num">STEP 01</div>
+      <div class="step-title">Import</div>
+      <div class="step-code">from tensorpress
+  import Compressor
+  from tensorpress
+  import CompressConfig</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">STEP 02</div>
+      <div class="step-title">Instantiate Model</div>
+      <div class="step-code">model = ResNet50()
+# any nn.Module
+# TF / JAX future</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">STEP 03</div>
+      <div class="step-title">Configure</div>
+      <div class="step-code">cfg = CompressConfig(
+  method="tucker",
+  layers="all",
+  ranks="auto",
+  finetune=True
+)</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">STEP 04</div>
+      <div class="step-title">Compress</div>
+      <div class="step-code">c = Compressor(cfg)
+result = c.compress(
+  model, dataloader)
+result.report()</div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">STEP 05</div>
+      <div class="step-title">Evaluate</div>
+      <div class="step-code">result.compare()
+result.export(
+  "compressed.pt")</div>
+    </div>
+  </div>
+
+  <!-- ── ARCHITECTURE LAYERS ────────────────────────── -->
+  <p class="section-label">// 02 — Package Architecture</p>
+  <div class="arch">
+
+    <div class="layer l-public">
+      <div class="layer-header"><span class="dot"></span>Public API — tensorpress/__init__.py</div>
+      <div class="layer-body">
+        <div class="module">Compressor</div>
+        <div class="module">CompressConfig</div>
+        <div class="module">CompressionResult</div>
+        <div class="module sub">@compress_model  [future decorator]</div>
+      </div>
+    </div>
+
+    <div class="connector">↓</div>
+
+    <div class="layer l-config">
+      <div class="layer-header"><span class="dot"></span>Config &amp; Selection — tensorpress/config/</div>
+      <div class="layer-body">
+        <div class="module">CompressConfig</div>
+        <div class="module">LayerSelector  (all | named | regex | type)</div>
+        <div class="module">RankEstimator  (auto | manual | VBMF)</div>
+        <div class="module">FinetuneConfig  (epochs, lr, scheduler)</div>
+      </div>
+    </div>
+
+    <div class="connector">↓</div>
+
+    <div class="layer l-core">
+      <div class="layer-header"><span class="dot"></span>Core Engine — tensorpress/core/</div>
+      <div class="layer-body">
+        <div class="module">Compressor  (orchestrates the pipeline)</div>
+        <div class="module">LayerReplacer  (swap conv → factorized)</div>
+        <div class="module">FineTuner  (optional post-compression training)</div>
+        <div class="module">CompressionResult  (metrics + model ref)</div>
+        <div class="module sub">pipeline.py  (compress → replace → finetune → eval)</div>
+      </div>
+    </div>
+
+    <div class="connector">↓</div>
+
+    <div class="layer l-backend">
+      <div class="layer-header"><span class="dot"></span>Decomposition Backends — tensorpress/decompositions/</div>
+      <div class="layer-body">
+        <div class="module">BaseDecomposition  (ABC)</div>
+        <div class="module">TuckerDecomposition</div>
+        <div class="module">CPDecomposition  (CPD)</div>
+        <div class="module sub">SVDDecomposition  [future]</div>
+        <div class="module sub">TTDecomposition   [future]</div>
+      </div>
+    </div>
+
+    <div class="connector">↓</div>
+
+    <div class="layer l-core" style="--accent2:#06b6d4">
+      <div class="layer-header" style="color:#06b6d4"><span class="dot" style="background:#06b6d4"></span>Framework Adapters — tensorpress/backends/</div>
+      <div class="layer-body">
+        <div class="module" style="color:#06b6d4;border-color:rgba(6,182,212,0.35);background:rgba(6,182,212,0.04)">BaseBackend  (ABC)</div>
+        <div class="module" style="color:#06b6d4;border-color:rgba(6,182,212,0.35);background:rgba(6,182,212,0.04)">PyTorchBackend  ✓ now</div>
+        <div class="module sub" style="color:#06b6d4;border-color:rgba(6,182,212,0.25);background:rgba(6,182,212,0.04)">TensorFlowBackend  [roadmap]</div>
+        <div class="module sub" style="color:#06b6d4;border-color:rgba(6,182,212,0.25);background:rgba(6,182,212,0.04)">JAXBackend  [roadmap]</div>
+      </div>
+    </div>
+
+    <div class="connector">↓</div>
+
+    <div class="layer l-utils">
+      <div class="layer-header"><span class="dot"></span>Utilities — tensorpress/utils/</div>
+      <div class="layer-body">
+        <div class="module">metrics.py  (params, FLOPs, latency)</div>
+        <div class="module">profiler.py  (before / after diff)</div>
+        <div class="module">serialization.py  (save / load compressed)</div>
+        <div class="module">logging.py</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── FILE TREE + DECISION TABLE ─────────────────── -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">// Proposed File Tree</div>
+      <div class="tree">
+<span class="dir">tensorpress/</span>
+├── <span class="file highlight">__init__.py</span>      <span class="comment"># public surface</span>
+├── <span class="dir">config/</span>
+│   ├── <span class="file new">schema.py</span>       <span class="comment"># dataclasses</span>
+│   ├── <span class="file new">selectors.py</span>
+│   └── <span class="file new">rank_estimators.py</span>
+├── <span class="dir">core/</span>
+│   ├── <span class="file highlight">compressor.py</span>
+│   ├── <span class="file new">replacer.py</span>
+│   ├── <span class="file new">finetuner.py</span>
+│   ├── <span class="file new">result.py</span>
+│   └── <span class="file new">pipeline.py</span>
+├── <span class="dir">decompositions/</span>
+│   ├── <span class="file highlight">base.py</span>
+│   ├── <span class="file highlight">tucker.py</span>
+│   └── <span class="file highlight">cpd.py</span>
+├── <span class="dir">backends/</span>
+│   ├── <span class="file new">base.py</span>
+│   └── <span class="file new">pytorch.py</span>
+└── <span class="dir">utils/</span>
+    ├── <span class="file new">metrics.py</span>
+    ├── <span class="file new">profiler.py</span>
+    └── <span class="file new">serialization.py</span>
+<span class="comment">
+legend: </span><span class="file highlight">■</span><span class="comment"> migrate  </span><span class="file new">■</span><span class="comment"> create new</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">// Key Design Decisions</div>
+      <div class="tree" style="font-size:11px;line-height:2">
+<span style="color:var(--accent4)">Config:</span>
+  dataclass-based, fully serializable
+  JSON / YAML round-trip for reproducibility
+
+<span style="color:var(--accent4)">LayerSelector:</span>
+  "all" → every Conv2d
+  ["layer1","layer2"] → named
+  regex → flexible matching
+  lambda → custom predicate
+
+<span style="color:var(--accent4)">RankEstimator:</span>
+  "auto" → VBMF heuristic
+  float → compression ratio
+  dict → per-layer manual ranks
+
+<span style="color:var(--accent4)">Decomposition:</span>
+  ABC with .decompose(weight)
+  returns factorized nn.Sequential
+
+<span style="color:var(--accent4)">Backend:</span>
+  ABC isolates framework ops
+  PyTorch ships in v1
+  TF/JAX via same interface
+
+<span style="color:var(--accent4)">Result:</span>
+  .report()  → rich table
+  .compare() → side-by-side
+  .export()  → save state dict
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CURSOR AGENTS ───────────────────────────────── -->
+  <p class="section-label">// 03 — Cursor AI Agents</p>
+  <div class="agent-grid">
+    <div class="agent-card">
+      <div class="agent-name">AGENT_REFACTOR</div>
+      <div class="agent-scope">Migrates existing Tucker/CPD code into decompositions/tucker.py and cpd.py following BaseDecomposition ABC. No logic changes — only structural.</div>
+      <span class="tag refactor">REFACTOR</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_CONFIG</div>
+      <div class="agent-scope">Creates config/schema.py (CompressConfig dataclass) + selectors.py (LayerSelector) + rank_estimators.py with VBMF stub.</div>
+      <span class="tag new">NEW</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_CORE</div>
+      <div class="agent-scope">Builds core/compressor.py (main orchestrator), replacer.py (conv swap logic), finetuner.py, result.py with .report() and .compare().</div>
+      <span class="tag new">NEW</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_BACKEND</div>
+      <div class="agent-scope">Implements backends/base.py (ABC) and backends/pytorch.py. Wraps all torch-specific ops (get_layers, replace_module, etc.).</div>
+      <span class="tag new">NEW</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_UTILS</div>
+      <div class="agent-scope">Creates metrics.py (param count, FLOPs via torchinfo), profiler.py (before/after comparison), serialization.py.</div>
+      <span class="tag new">NEW</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_TESTS</div>
+      <div class="agent-scope">Generates pytest suite: unit tests per decomposition, integration test (full compress cycle on TinyVGG), config validation tests.</div>
+      <span class="tag test">TEST</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_PACKAGING</div>
+      <div class="agent-scope">Sets up pyproject.toml, MANIFEST.in, README.md, CHANGELOG.md, GitHub Actions CI (lint + test + publish to PyPI).</div>
+      <span class="tag docs">DOCS</span>
+    </div>
+    <div class="agent-card">
+      <div class="agent-name">AGENT_DOCS</div>
+      <div class="agent-scope">Writes full docstrings (NumPy style), generates mkdocs site config, adds usage examples notebook in examples/.</div>
+      <span class="tag docs">DOCS</span>
+    </div>
+  </div>
+
+  <footer>tensorpress · tensor factorization compression · v0.1 target · MIT license</footer>
+</div>
+</body>
+</html>

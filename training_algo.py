@@ -3,27 +3,25 @@ Several procedures to train a CNN.
 # Training with a scheduler
 # Fine-tuning with a feature extractor
 '''
+import logging
 
-# Pytorch core
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torch.autograd import Variable
 import torchvision
 from torchvision import datasets, models
 
-# PyTorch Utils
 from pytorch_utils import *
-from logger import Logger
 from models.metrics import accuracy
 
-# Generic
 import numpy as np
 import matplotlib.pyplot as plt
 import time
 import os
 import copy
+
+log = logging.getLogger(__name__)
 
 
 # Train and Validation
@@ -31,7 +29,6 @@ def train_model_val(model, dataloaders, criterion, optimizer, scheduler, epochs=
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     since = time.time()
-    logger = Logger(log_dir="./logs")
 
     # switching optimizer after a certain thresh
     switched_opt = False
@@ -47,19 +44,17 @@ def train_model_val(model, dataloaders, criterion, optimizer, scheduler, epochs=
     best_loss = 100.0
     total_step = 0.0
 
-    model.train(True)  # Set model to training mode
+    model.train()
 
     for epoch in range(epochs):
         print('Epoch {}/{}'.format(epoch+1, epochs))
         print('-' * 10)
 
-        # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
-                scheduler.step()
-                model.train(True)  # Set model to training mode
+                model.train()
             else:
-                model.train(False)  # Set model to evaluate mode
+                model.eval()
 
             running_loss = 0.0
             running_corrects = 0
@@ -102,6 +97,7 @@ def train_model_val(model, dataloaders, criterion, optimizer, scheduler, epochs=
 # % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
 
             if phase == 'train':
+                scheduler.step()
                 train_loss_to_plot = epoch_loss
 
             else:
@@ -112,16 +108,13 @@ def train_model_val(model, dataloaders, criterion, optimizer, scheduler, epochs=
                     'accuracy': epoch_acc  # val accuracy
                 }
 
-                # (2) Log CSV file
-                logger.log_csv(epoch, metrics['accuracy'], metrics['loss'])
-                # (3) Tensorboard specific logging
-                logger.tensorboard_log(epoch, model, metrics)
+                log.debug('epoch %d: loss=%.4f acc=%.4f', epoch, metrics['loss'], metrics['accuracy'])
 
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
                 print('Acc improved from %.3f to %.3f'
                       % (best_acc, epoch_acc))
-                logger.log_test(epoch, epoch_acc)
+                log.debug('test epoch %d: acc=%.4f', epoch, epoch_acc)
 
                 print('Saving model to ' + model_filename + "...\n")
                 best_acc = epoch_acc
@@ -164,7 +157,6 @@ def train_model_val(model, dataloaders, criterion, optimizer, scheduler, epochs=
 def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_threshold=0.3, epochs=25):
     trainloader = dataloader['train']
     testloader = dataloader['test']
-    logger = Logger(log_dir='./logs')
     device = ("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     since = time.time()
@@ -192,17 +184,15 @@ def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_th
     current_test_acc = 0.0
     plateau_counter = 0
 
-    model.train(True)  # Set model to training mode
+    model.train()
 
     for epoch in range(epochs):
         print('Epoch {}/{}'.format(epoch + 1, epochs))
         print('-' * 10)
 
-        # scheduler.step()
         running_loss = 0.0
         running_corrects = 0
 
-        # Iterate over data.
         for step, data in enumerate(trainloader, 0):
             # get the input batch
             inputs, labels = data
@@ -251,12 +241,7 @@ def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_th
                     'accuracy': step_acc
                 }
 
-                # (2) Log CSV file
-                print('logging...')
-                logger.log_csv(
-                    total_step, metrics['accuracy'], metrics['loss'])
-                # (3) Tensorboard specific logging
-                logger.tensorboard_log(total_step, model, metrics)
+                log.debug('step %d: loss=%.4f acc=%.4f', total_step, metrics['loss'], metrics['accuracy'])
 
                 # save checkpoint
                 save_checkpoint(model.state_dict(),
@@ -310,11 +295,9 @@ def train_test_model(dataloader, model, criterion, optimizer, scheduler, loss_th
                     else:
                         plateau_counter += 1
 
-                    # log test val
-                    logger.log_test(total_step, best_test_acc)
+                    log.debug('test step %d: best_acc=%.4f', total_step, best_test_acc)
 
-                    # switch back model
-                    model.train(True)  # Set model to training mode
+                    model.train()
                     model.cuda()
 
                 ## EARLY STOPPING ##
@@ -517,7 +500,7 @@ def quick_test_cifar(testloader, model):
     correct = 0
     total = 0
     total_time = 0
-    model.train(False)
+    model.eval()
     model.cpu()
 
     for i, (batch, labels) in enumerate(testloader):

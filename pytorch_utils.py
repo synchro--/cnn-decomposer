@@ -4,21 +4,19 @@ To split eventually into different modules.
 ---------
 A. Salman
 '''
-# pytorch
+import logging
+
 from torch.nn.modules.module import _addindent
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.optim as optim
 import torch.utils.data as data
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torchvision.transforms as transforms
 
-# Utils
 import numpy as np
 import matplotlib.pyplot as plt
-from logger import Logger
 import scipy.io as sio
 import os
 import time
@@ -26,6 +24,8 @@ import math
 import sys
 import json
 import shutil
+
+log = logging.getLogger(__name__)
 
 
 def to_np(x):
@@ -35,7 +35,7 @@ def to_np(x):
 def to_var(x):
     if torch.cuda.is_available():
         x = x.cuda()
-    return Variable(x)
+    return x
 
 # Set of utils taken from CS231 Stanford Class
 
@@ -120,10 +120,10 @@ def save_checkpoint(state, is_best, checkpoint):
     """
     filepath = os.path.join(checkpoint, 'last.pth.tar')
     if not os.path.exists(checkpoint):
-        print("Checkpoint Directory does not exist! Making directory {}".format(checkpoint))
+        log.debug("Checkpoint directory does not exist, creating: %s", checkpoint)
         os.mkdir(checkpoint)
     else:
-        print("Saving file to: " + filepath)
+        log.debug("Saving file to: %s", filepath)
     torch.save(state, filepath)
     if is_best:
         shutil.copyfile(filepath, os.path.join(checkpoint, 'best.pth.tar'))
@@ -148,46 +148,6 @@ def load_checkpoint(checkpoint, model, optimizer=None):
 
     return checkpoint
 
- # ============ TensorBoard logging ============ #
- # da eliminare
-
-
-def tensorboard_log(steps, model, info, dir='./logs'):
-    logger = Logger(dir)
-
-    for tag, value in info.items():
-        logger.scalar_summary(tag, value, steps)
-
-    # (2) Log values and gradients of the parameters (histogram)
-    '''
-    for tag, value in model.named_parameters():
-        # print(str(tag)+"  "+str(value))
-        tag = tag.replace('.', '/')
-        logger.histo_summary(tag, to_np(value), steps)
-        if 'bn' not in tag and value.grad is not None:
-            logger.histo_summary(
-                tag + '/grad', to_np(value.grad), steps)
-    '''
-
-
-'''
-def log_csv(step, acc, loss, val=0, file='cifar10.csv'):
-    with open(file, 'a') as out:
-        out.write("%d,%.3f,%.3f\n" % (step, acc, loss))
-        out.close()
-
-
-def log_test(step, val=0, file='test.csv'):
-    with open(file, 'a') as out:
-        out.write("%d,%.3f\n" % (step, val))
-        out.close()
-
-def log_compression(layer_weights, compression_factor, file='compression.txt'):
-    with open(file, 'a') as out:
-        out.write("Weights before: %d - Weights after:%d - Compression ratio: %.4f\n" %
-                  (layer_weights.size, (layer_weights.size / compression_factor), compression_factor))
-        out.close()
-'''
 
 
 def get_layer_bias(layer, numpy=True):
@@ -197,8 +157,7 @@ def get_layer_bias(layer, numpy=True):
         numpy: bool. Defalt true. If false return weights as torch array.
     '''
 
-    print('Retrieving weights of size: ' +
-          str(layer.bias.data.cpu().numpy().shape))
+    log.debug('Retrieving bias of size: %s', layer.bias.data.cpu().numpy().shape)
     if numpy:
         return layer.bias.data.cpu().numpy()
     else:
@@ -212,10 +171,10 @@ def set_layer_bias(layer, tensor):
         layer: the specified layer
         tensor: tensor as an ndarray (Numpy)
     '''
-    if not(layer.bias.numpy().shape == tensor.shape):
-        raise Exception('Size mismatch! Cannot asssign weights')
+    if not(layer.bias.data.cpu().numpy().shape == tensor.shape):
+        raise Exception('Size mismatch! Cannot assign weights')
 
-    layer.bias = torch.from_numpy(np.float32(tensor))
+    layer.bias.data = torch.from_numpy(np.float32(tensor))
 
 
 def get_layer_weights(layer, numpy=True):
@@ -225,8 +184,7 @@ def get_layer_weights(layer, numpy=True):
         numpy: bool. Defalt true. If false return weights as torch array.
     '''
 
-    print('Retrieving weights of size: ' +
-          str(layer.weight.data.cpu().numpy().shape))
+    log.debug('Retrieving weights of size: %s', layer.weight.data.cpu().numpy().shape)
     if numpy:
         return to_np(layer.weight)
     else:
@@ -241,10 +199,8 @@ def set_layer_weights(layer, tensor):
         layer: (torch.nn.Module) the specified layer
         tensor: (numpy array) tensor as an ndarray (Numpy)
     '''
-    if not(layer.weight.data.numpy().shape == tensor.shape):
-        print(layer.weight.data.numpy().shape)
-        print(tensor.shape)
-        raise Exception('[MY]: Size mismatch! Cannot assign weights')
+    if not(layer.weight.data.cpu().numpy().shape == tensor.shape):
+        raise Exception('Size mismatch! Cannot assign weights')
 
     layer.weight.data = torch.from_numpy(np.float32(tensor))
 
@@ -284,7 +240,7 @@ def dump_model_weights(model, save_dir='./dumps'):
     allweights = []
     for layer in model.modules():
         if isinstance(layer, torch.nn.modules.conv.Conv2d):
-            print('Saving layer: ' + str(layer) + ' to ' + save_dir)
+            log.debug('Saving layer: %s to %s', layer, save_dir)
             tmp = []
             tmp.append(layer.weight)
             tmp.append(layer.bias)
@@ -303,10 +259,8 @@ def dump_layer_weights(layer, filename="weights.mat", save_dir='dumps/'):
         os.makedirs(save_dir)
 
     weights = get_layer_weights(layer, numpy=True)
-    print('Saving layer ' + str(layer) + " to" + save_dir)
-
     name = save_dir + filename
-    print(name)
+    log.debug('Saving layer %s to %s', layer, name)
     sio.savemat(name,  {'weights': weights})
 
 
@@ -315,7 +269,7 @@ def load_cpd_weights(filename):
     import os
 
     if not os.path.isfile(filename):
-        print("ERROR: .mat file not found")
+        log.error(".mat file not found: %s", filename)
         return
 
     # load struct 'cpd_s' from file
@@ -328,7 +282,7 @@ def load_cpd_weights(filename):
     f_first = cpd[0][1]
     f_vertical = cpd[0][2]
     f_horizontal = cpd[0][3]
-    print('Loaded cpd weights succesfully.')
+    log.debug('Loaded CPD weights successfully.')
 
     return f_last, f_first, f_vertical, f_horizontal  # , bias
 
@@ -341,7 +295,7 @@ def xavier_init_layer(layer):
         layer.weight.data.fill_(1)
         layer.bias.data.zero_()
     else:
-        torch.nn.init.xavier_uniform(layer.weight)
+        torch.nn.init.xavier_uniform_(layer.weight)
 
 
 def xavier_init_net(self):
@@ -350,7 +304,7 @@ def xavier_init_net(self):
             m.weight.data.fill_(1)
             m.bias.data.zero_()
         else:
-            torch.nn.init.xavier_uniform(m.weight)
+            torch.nn.init.xavier_uniform_(m.weight)
 
 
 '''
@@ -362,22 +316,25 @@ see: https://github.com/kuangliu/pytorch-cifar/blob/master/utils.py
 def init_params(net):
     for m in net.modules():
         if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal(m.weight, mode='fan_out')
-            if m.bias:
-                nn.init.constant(m.bias, 0)
+            nn.init.kaiming_normal_(m.weight, mode='fan_out')
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.BatchNorm2d):
-            nn.init.constant(m.weight, 1)
-            nn.init.constant(m.bias, 0)
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.Linear):
-            nn.init.normal(m.weight, std=1e-3)
-            if m.bias:
-                nn.init.constant(m.bias, 0)
+            nn.init.normal_(m.weight, std=1e-3)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
 
 
 ## Progress Bar vars ##
 
-_, term_width = os.popen('stty size', 'r').read().split()
-term_width = int(term_width)
+try:
+    _, term_width = os.popen('stty size', 'r').read().split()
+    term_width = int(term_width)
+except ValueError:
+    term_width = 80
 
 TOTAL_BAR_LENGTH = 65.
 last_time = time.time()
@@ -595,7 +552,7 @@ def get_train_valid_loader(data_dir,
             num_workers=num_workers, pin_memory=pin_memory,
         )
         data_iter = iter(sample_loader)
-        images, labels = data_iter.next()
+        images, labels = next(data_iter)
         X = images.numpy().transpose([0, 2, 3, 1])
         plot_images(X, labels)
 

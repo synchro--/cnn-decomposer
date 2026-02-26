@@ -7,8 +7,6 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-
 from collections import OrderedDict
 
 # Example 2-Layer custom network
@@ -114,7 +112,7 @@ class CPD_Zhang(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             else:
-                torch.nn.init.xavier_uniform(m.weight)
+                torch.nn.init.xavier_uniform_(m.weight)
 
     def __init__(self, rank1, rank2, rankFC, relu=False):
         super(CPD_Zhang, self).__init__()
@@ -330,7 +328,7 @@ class CPD_All_Conv(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
             else:
-                torch.nn.init.xavier_uniform(m.weight)
+                torch.nn.init.xavier_uniform_(m.weight)
 
     def __init__(self, rank1, rank2, rankFC, relu=False):
         super(CPD_All_Conv, self).__init__()

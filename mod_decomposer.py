@@ -10,6 +10,8 @@
 #
 #
 
+import logging
+
 import tensorly as tl
 from tensorly.decomposition import parafac, partial_tucker
 import numpy as np
@@ -17,10 +19,9 @@ import torch
 import torch.nn as nn
 from VBMF import VBMF
 import collections
-from logger import Logger
 from pytorch_utils import *
 
-logger = Logger('./logs')
+log = logging.getLogger(__name__)
 
 """
 Decomposer module to abstract tensor decomposition methods for
@@ -53,13 +54,13 @@ def estimate_tucker_ranks(layer, compression_factor=0):
     Returns:
         ranks: (list) the estimated ranks [R3, R4]
     """
-    weights = layer.weight.data.numpy()
+    weights = layer.weight.data.cpu().numpy()
     unfold_0 = tl.base.unfold(weights, 0)
     unfold_1 = tl.base.unfold(weights, 1)
     _, diag_0, _, _ = VBMF.EVBMF(unfold_0)
     _, diag_1, _, _ = VBMF.EVBMF(unfold_1)
     ranks = [diag_0.shape[0], diag_1.shape[1]]
-    print('VBMF estimated ranks: ' + str(ranks))
+    log.debug('VBMF estimated ranks: %s', ranks)
 
     if compression_factor:
         # Check if the VBMF ranks are small enough
@@ -79,17 +80,14 @@ def estimate_cp_ranks(layer, compression_factor=0):
     Returns:
         rank: (int) the estimated rank R
     """
-    weights = layer.weight.data.numpy()
+    weights = layer.weight.data.cpu().numpy()
     unfold_0 = tl.base.unfold(weights, 0)
     unfold_1 = tl.base.unfold(weights, 1)
-    #unfold_2 = tl.base.unfold(weights, 3)
     _, diag_0, _, _ = VBMF.EVBMF(unfold_0)
     _, diag_1, _, _ = VBMF.EVBMF(unfold_1)
     #_, diag_2, _, _ = VBMF.EVBMF(unfold_2)
-    print('Mode-1 Rank: ' + str(diag_0.shape[0]))
-    print('Mode-2 Rank:' + str(diag_1.shape[1]))
     rank = max(diag_0.shape[0], diag_1.shape[1])
-    print('VBMF estimated rank (max):', str(rank))
+    log.debug('VBMF estimated rank (max): %d', rank)
     if rank == 0:
         rank = 10
     ranks = [rank, rank]
@@ -135,15 +133,14 @@ def pytorch_cp_layer_decomposition_BN(layer, rank=0, offline=False, filename='')
         Returns:
             The compressed CNN model.
     """
-    first_pointwise, separable_vertical,
-    separable_horizontal, last_pointwise = _cp_decomposition(
+    (first_pointwise, separable_vertical,
+     separable_horizontal, last_pointwise) = _cp_decomposition(
         layer, rank, offline, filename)
 
-    # create BatchNorm layers wrt to decomposed layers weights
-    bn_first = nn.BatchNorm2d(first.shape[1])
-    bn_vertical = nn.BatchNorm2d(vertical.shape[1])
-    bn_horizontal = nn.BatchNorm2d(horizontal.shape[1])
-    bn_last = nn.BatchNorm2d(last.shape[0])
+    bn_first = nn.BatchNorm2d(first_pointwise.out_channels)
+    bn_vertical = nn.BatchNorm2d(separable_vertical.out_channels)
+    bn_horizontal = nn.BatchNorm2d(separable_horizontal.out_channels)
+    bn_last = nn.BatchNorm2d(last_pointwise.out_channels)
 
     new_layers = [first_pointwise, bn_first, separable_vertical, bn_vertical,
                   separable_horizontal, bn_horizontal,  last_pointwise,
@@ -170,222 +167,10 @@ def pytorch_tucker_layer_decomposition(layer, compression=0, offline=False, file
     return nn.Sequential(*new_layers)
 
 
-def FC_SVD_compression(layer, trunc=15):
-    """
-    Compress a FC layer applying SVD
-    Returns
-        A sequential module containing the 2 compressed layers.
-    """
-    # trunc = layer.weight.data.numpy().shape[0]
-    weights1, weights2 = _SVD_weights(
-        layer.weight.data.cpu().numpy().T, trunc)
 
-    # create SVD FC-layers:
-    fc1 = torch.nn.Linear(weights1.shape[0], weights1.shape[1])
-    fc2 = torch.nn.Linear(weights2.shape[0], weights2.shape[1])
-    print('created: ')
-    print(fc1)
-    print(fc2)
+# TODO: v0.2 SVD support
+# FC_SVD_compression, conv1x1_SVD_compression removed — planned for v0.2
 
-    fc1.weight.data = torch.from_numpy(np.float32(weights1))
-    fc2.weight.data = torch.from_numpy(np.float32(weights2))
-    new_layers = [fc1, fc2]
-    return nn.Sequential(*new_layers)
-
-
-def conv1x1_SVD_compression(layer, trunc=15):
-    """
-    Compress a 1x1 conv layer applying SVD
-    Returns:
-        A sequential module containing the 2 compressed layers.
-    """
-    # trunc = layer.weight.data.numpy().shape[0]
-    W = layer.weight.data.cpu().numpy()
-    bias = layer.bias.data
-
-    # create the 2 conv layers
-    first = torch.nn.Conv2d(in_channels=W.shape[0],
-                            out_channels=trunc,
-                            kernel_size=1,
-                            stride=layer.stride,
-                            padding=0,
-                            dilation=layer.dilation,
-                            bias=False)
-
-    second = torch.nn.Conv2d(in_channels=trunc,
-                             out_channels=W.shape[1],
-                             kernel_size=1,
-                             stride=layer.stride,
-                             padding=0,
-                             dilation=layer.dilation,
-                             bias=True)
-    second.bias.data = bias
-
-    W = W.T
-    W.resize(W.shape[2], W.shape[3])
-    weights1, weights2 = _SVD_weights(W.T, trunc)
-
-    # Transpose dimensions back to what PyTorch expects
-    first_weights = np.expand_dims(
-        np.expand_dims(weights1.T, axis=-1), axis=-1)
-    second_weights = np.expand_dims(np.expand_dims(
-        weights2.T, axis=-1), axis=-1)
-
-    print(first)
-    print(first_weights.shape)
-
-    set_layer_weights(first,
-                      first_weights)
-    set_layer_weights(second,
-                      second_weights)
-
-    new_layers = [first, second]
-    return nn.Sequential(*new_layers)
-
-
-'''
-# NB. ideally this should not even have the rank option and be more
-#     intuitive to use.
-
-
-
-def pytorch_tucker_decomposition_BN( layer, rank, offline=False, filename=''):
-    """
-    Gets a conv layer and a target rank, returns a nn.Sequential compressed CNN,
-    with BN units between the compressed layers.
-    Args:
-        layer: the conv layer to decompose
-        rank: the rank of the CP-decomposition
-        offline: bool, if true the weights will be loaded from the file
-                    specified in file name
-        filename: string, file from which we have to load the weights.
-
-    Returns:
-        The compressed CNN model.
-"""
-first_pointwise, separable_vertical,
-separable_horizontal, last_pointwise = _tucker_decomposition(la)
-
-# create BatchNorm layers wrt to decomposed layers weights
-bn_first = nn.BatchNorm2d(first.shape[1])
-bn_vertical = nn.BatchNorm2d(vertical.shape[1])
-bn_horizontal = nn.BatchNorm2d(horizontal.shape[1])
-bn_last = nn.BatchNorm2d(last.shape[0])
-
-new_layers = [pointwise_s_to_r_layer, bn_first, depthwise_vertical_layer, bn_vertical,
-                depthwise_horizontal_layer, bn_horizontal,  pointwise_r_to_t_layer,
-                bn_last]
-return nn.Sequential(*new_layers)
-
-# DA rivedere
-def _tucker_xavier( layer):
-    ranks = estimate_ranks(layer)
-    print(layer, "VBMF Estimated ranks", ranks)
-    core, [last, first] = \
-        partial_tucker(layer.weight.data.numpy(),
-                        modes=[0, 1], ranks=ranks, init='svd')
-
-    # A pointwise convolution that reduces the channels from S to R3
-    first_layer = torch.nn.Conv2d(in_channels=first.shape[0],
-                                    out_channels=first.shape[1],
-                                    kernel_size=1,
-                                    stride=layer.stride,
-                                    padding=0,
-                                    dilation=layer.dilation,
-                                    bias=False)
-
-    # A regular 2D convolution layer with R3 input channels
-    # and R3 output channels
-    core_layer = torch.nn.Conv2d(in_channels=core.shape[1],
-                                    out_channels=core.shape[0],
-                                    kernel_size=layer.kernel_size,
-                                    stride=layer.stride,
-                                    padding=layer.padding,
-                                    dilation=layer.dilation,
-                                    bias=False)
-
-    # A pointwise convolution that increases the channels from R4 to T
-    last_layer = torch.nn.Conv2d(in_channels=last.shape[1],
-                                    out_channels=last.shape[0],
-                                    kernel_size=1,
-                                    stride=layer.stride,
-                                    padding=0,
-                                    dilation=layer.dilation,
-                                    bias=True)
-
-    last_layer.bias.data = layer.bias.data
-
-    new_layers = [first_layer, core_layer, last_layer]
-
-        # Xavier init:
-    for l in new_layers:
-        xavier_weights2(l)
-
-    return nn.Sequential(*new_layers)
-
-
-# DA FARE
-def _cp_xavier_conv_layer( layer, rank):
-    """ Gets a conv layer and a target rank,
-        returns a nn.Sequential object with the decomposition """
-
-    # Perform CP decomposition on the layer weight tensor.
-    print(layer, rank)
-    weights = layer.weight.data.numpy()
-    print(weights.shape[1])
-
-    pointwise_s_to_r_layer = torch.nn.Conv2d(in_channels=weights.shape[1],
-                                                out_channels=rank,
-                                                kernel_size=1,
-                                                stride=layer.stride,
-                                                padding=0,
-                                                dilation=layer.dilation,
-                                                bias=False)
-
-    depthwise_vertical_layer = torch.nn.Conv2d(in_channels=rank,
-                                                out_channels=rank,
-                                                kernel_size=(weights.shape[2], 1),
-                                                stride=layer.stride,
-                                                padding=(layer.padding[0], 0),
-                                                dilation=layer.dilation,
-                                                groups=rank,
-                                                bias=False)
-
-    depthwise_horizontal_layer = torch.nn.Conv2d(in_channels=rank,
-                                                    out_channels=rank,
-                                                    kernel_size=(1, weights.shape[3]),
-                                                    stride=layer.stride,
-                                                    padding=(0, layer.padding[0]),
-                                                    dilation=layer.dilation,
-                                                    groups=rank,
-                                                    bias=False)
-
-    pointwise_r_to_t_layer = torch.nn.Conv2d(in_channels=rank,
-                                                out_channels=weights.shape[0],
-                                                kernel_size=1,
-                                                stride=layer.stride,
-                                                padding=0,
-                                                dilation=layer.dilation,
-                                                bias=True)
-    pointwise_r_to_t_layer.bias.data = layer.bias.data
-
-    # create BatchNorm layers wrt to decomposed layers weights
-    bn_first = nn.BatchNorm2d(rank)
-    bn_vertical = nn.BatchNorm2d(rank)
-    bn_horizontal = nn.BatchNorm2d(rank)
-    bn_last = nn.BatchNorm2d(weights.shape[0])
-
-    new_layers = [pointwise_s_to_r_layer, bn_first, depthwise_vertical_layer, bn_vertical,
-                    depthwise_horizontal_layer, bn_horizontal,  pointwise_r_to_t_layer,
-                    bn_last]
-
-    # Xavier init:
-    for l in new_layers:
-        xavier_weights2(l)
-
-    return nn.Sequential(*new_layers)
-
-'''
 
 ##################### private utils #######################################
 ###########################################################################
@@ -416,7 +201,7 @@ def _choose_compression(layer, ranks, compression_factor=2, flag='Tucker2', fram
 
     if framework == 'pytorch':
         # PyTorch format is [OUT, IN, k1, k2]
-        weights = layer.weight.data.numpy()
+        weights = layer.weight.data.cpu().numpy()
         T = weights.shape[0]
         S = weights.shape[1]
         d = weights.shape[2]
@@ -427,29 +212,21 @@ def _choose_compression(layer, ranks, compression_factor=2, flag='Tucker2', fram
         compression = ((d**2)*S*T) / \
             ((S*ranks[0] + ranks[0]*ranks[1] * (d**2) + T*ranks[1]))
         ranks[0] = ranks[0] * 3
-        print(compression)
+        log.debug('initial compression: %s', compression)
 
-        # compression must be 2 or more, otherwise arbitrary ranks will be chosen!
         if compression <= 2:
             while compression <= compression_factor:
-                '''
-                cumulative_rank = ((d**2) *S*T) / (compression_factor*(S/2 + (d**2) + T))
-                split_ratio = 0.7 # should be < 0.5
-                ranks[0] = np.floor(cumulative_rank * split_ratio).astype(int)
-                ranks[1] = np.floor(cumulative_rank - ranks[0]).astype(int)
-                '''
                 ranks[0] = ranks[0] // 2
                 ranks[1] = ranks[1] // 2
+                if ranks[0] < 1 or ranks[1] < 1:
+                    ranks[0] = max(1, ranks[0])
+                    ranks[1] = max(1, ranks[1])
+                    break
                 compression = ((d**2) * S * T) / ((S * ranks[0] +
                                                    ranks[0] * ranks[1] * (d**2) + T * ranks[1]))
 
-        print('compression factor for layer {} : {}'.format(
-            weights.shape, compression))
-        # Log compression factors and number of weights
-        logger.log_compression(weights, compression)
+        log.debug('compression factor for layer %s: %s', weights.shape, compression)
 
-    # for CPD things are easier, since it depends on a single rank R.
-    # hence, we set R get the desired compression and floor it.
     elif flag == 'cpd':
         rank = ranks[0]  # it is a single value
         compression = ((d**2)*T*S) / (rank*(S+2*d+T))
@@ -457,22 +234,13 @@ def _choose_compression(layer, ranks, compression_factor=2, flag='Tucker2', fram
             rank = ((d**2) * S * T) / (compression_factor * (S + 2*d + T))
             ranks[0] = np.floor(rank).astype(int)
 
-            # recompute new compression ratio
             compression_factor = ((d**2) * S * T) / (rank * (S + 2*d + T))
-            print('compression factor for layer {} : {}'.format(
-                weights.shape, compression_factor))
-            # Log compression factors and number of weights
-            logger.log_compression(weights, compression_factor)
+            log.debug('compression factor for layer %s: %s', weights.shape, compression_factor)
 
         else:
-            # Log the standard compression
-            logger.log_compression(weights, compression)
-            print('compression factor for layer {} : {}'.format(
-                weights.shape, compression))
+            log.debug('compression factor for layer %s: %s', weights.shape, compression)
     else:
-        # other cases not yet supported
-        print('[choose compression]: Different decomposition not yet supported!')
-        raise(NotImplementedError)
+        raise NotImplementedError('Decomposition not yet supported: %s' % flag)
 
     return ranks
 
@@ -515,8 +283,8 @@ def _cp_decomposition(layer, rank, offline=False, filename=''):
     """
 
     # Perform CP decomposition on the layer weight tensor.
-    print('[Decomposer]: computing CP-decomposition of the layer {} with rank {}'.format(layer, rank))
-    X = layer.weight.data.numpy()
+    log.debug('computing CP-decomposition of layer %s with rank %d', layer, rank)
+    X = layer.weight.data.cpu().numpy()
     size = max(X.shape)
 
     # THIS SHOULD BE ENHANCED BY USING A SUBPROCESS CALL
@@ -529,12 +297,10 @@ def _cp_decomposition(layer, rank, offline=False, filename=''):
         # SVD init leads to generally better overall compression.
         # However, it can stall for large matrices.
         if size >= 256:
-            print("Init random")
-            last, first, vertical, horizontal = parafac(
-                X, rank=rank, init='random')
+            _, factors = parafac(X, rank=rank, init='random')
         else:
-            last, first, vertical, horizontal = parafac(
-                X, rank=rank, init='svd')
+            _, factors = parafac(X, rank=rank, init='svd')
+        last, first, vertical, horizontal = factors
 
     first_pointwise = torch.nn.Conv2d(in_channels=first.shape[0],
                                       out_channels=first.shape[1],
@@ -609,8 +375,8 @@ def _tucker_layer_decomposition(layer, ranks, offline=False, filename=''):
             The compressed 3 layers that substitutes the original one.
     """
 
-    print('[Decomposer]: computing Tucker decomposition of the layer {} with ranks {},{}'.format(
-        layer, ranks[0], ranks[1]))
+    log.debug('computing Tucker decomposition of layer %s with ranks %d,%d',
+              layer, ranks[0], ranks[1])
 
     # THIS SHOULD BE ENHANCED BY USING A SUBPROCESS CALL
     # WHICH CALLS THE MATLAB SCRIPT AND RETRIEVE THE RESULT
@@ -618,8 +384,8 @@ def _tucker_layer_decomposition(layer, ranks, offline=False, filename=''):
         last, first, vertical, horizontal = load_cpd_weights(filename)
 
     else:
-        core, [last, first] = partial_tucker(layer.weight.data.numpy(), modes=[
-                                             0, 1], ranks=ranks, init='svd')
+        (core, [last, first]), _errs = partial_tucker(
+            layer.weight.data.cpu().numpy(), modes=[0, 1], rank=ranks, init='svd')
 
     # A pointwise convolution that reduces the channels from S to R3
     first_layer = torch.nn.Conv2d(in_channels=first.shape[0],

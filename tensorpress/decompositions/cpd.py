@@ -132,14 +132,14 @@ class CPDecomposition(BaseDecomposition):
         list[int]
             Estimated rank in ``[R]`` form.
         """
-        from VBMF import VBMF
+        from tensorpress._vbmf import EVBMF
 
         weights = layer.weight.data.cpu().numpy()
         unfold_0 = tl.base.unfold(weights, 0)
         unfold_1 = tl.base.unfold(weights, 1)
-        _, diag_0, _, _ = VBMF.EVBMF(unfold_0)
-        _, diag_1, _, _ = VBMF.EVBMF(unfold_1)
-        rank = max(diag_0.shape[0], diag_1.shape[1])
+        _, diag_0, _, _ = EVBMF(unfold_0)
+        _, diag_1, _, _ = EVBMF(unfold_1)
+        rank = max(diag_0.shape[0], diag_1.shape[0])
         if rank == 0:
             rank = 10
         ranks = [rank, rank]

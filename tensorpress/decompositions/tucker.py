@@ -15,6 +15,42 @@ from .base import BaseDecomposition
 log = logging.getLogger(__name__)
 
 
+def _partial_tucker_core_last_first(weight_np: np.ndarray, ranks: list[int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Call TensorLy ``partial_tucker`` and return ``(core, last_mode0, first_mode1)``.
+
+    TensorLy versions differ: keyword ``rank`` vs ``ranks``, and the return may be
+    ``((core, factors), errors)`` or a flatter tuple. This function normalizes.
+    """
+    modes = [0, 1]
+    init = "svd"
+    last_err: Exception | None = None
+    for kwargs in (
+        {"modes": modes, "ranks": ranks, "init": init},
+        {"modes": modes, "rank": ranks, "init": init},
+    ):
+        try:
+            out = partial_tucker(weight_np, **kwargs)
+            break
+        except TypeError as exc:
+            last_err = exc
+            continue
+    else:
+        raise last_err if last_err else RuntimeError("partial_tucker failed")
+
+    head = out[0] if isinstance(out, tuple) and len(out) >= 1 else out
+    if isinstance(head, tuple) and len(head) == 2:
+        core_maybe, factors = head
+        if isinstance(core_maybe, np.ndarray) and isinstance(factors, list) and len(factors) >= 2:
+            last, first = factors[0], factors[1]
+            return core_maybe, last, first
+    if isinstance(out, tuple) and len(out) == 2 and isinstance(out[0], np.ndarray):
+        core, factors = out[0], out[1]
+        if isinstance(factors, (list, tuple)) and len(factors) >= 2:
+            last, first = factors[0], factors[1]
+            return core, last, first
+    raise ValueError(f"Unrecognized partial_tucker return structure: {type(out)}")
+
+
 class TuckerDecomposition(BaseDecomposition):
     """Tucker-2 decomposition strategy for ``nn.Conv2d`` layers."""
 
@@ -36,12 +72,7 @@ class TuckerDecomposition(BaseDecomposition):
         nn.Sequential
             Factorized replacement module.
         """
-        core, [last, first] = partial_tucker(
-            layer.weight.data.cpu().numpy(),
-            modes=[0, 1],
-            ranks=ranks,
-            init="svd",
-        )
+        core, last, first = _partial_tucker_core_last_first(layer.weight.data.cpu().numpy(), ranks)
 
         first_layer = nn.Conv2d(
             in_channels=first.shape[0],
@@ -110,13 +141,13 @@ class TuckerDecomposition(BaseDecomposition):
         list[int]
             Tucker ranks ``[R_out, R_in]``.
         """
-        from VBMF import VBMF
+        from tensorpress._vbmf import EVBMF
 
         weights = layer.weight.data.cpu().numpy()
         unfold_0 = tl.base.unfold(weights, 0)
         unfold_1 = tl.base.unfold(weights, 1)
-        _, diag_0, _, _ = VBMF.EVBMF(unfold_0)
-        _, diag_1, _, _ = VBMF.EVBMF(unfold_1)
+        _, diag_0, _, _ = EVBMF(unfold_0)
+        _, diag_1, _, _ = EVBMF(unfold_1)
         ranks = [diag_0.shape[0], diag_1.shape[1]]
         log.debug("VBMF estimated Tucker ranks: %s", ranks)
 

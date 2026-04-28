@@ -9,7 +9,7 @@ from typing import Any, Callable, Literal
 SchedulerType = Literal["cosine", "step", "none"]
 MethodType = Literal["tucker", "cpd"]
 LayerPredicate = Callable[[str, Any], bool]
-LayerSpec = str | list[str] | LayerPredicate
+LayerSpec = str | list[str] | LayerPredicate | None
 RankSpec = str | float | dict[str, Any]
 
 
@@ -27,12 +27,18 @@ class FinetuneConfig:
         Learning rate schedule strategy.
     warmup_steps : int, default=0
         Number of warmup steps before scheduler updates.
+    weight_decay : float, default=1e-5
+        AdamW weight decay.
+    use_amp : bool, default=False
+        If True and CUDA is available, enable automatic mixed precision.
     """
 
     epochs: int = 5
     lr: float = 1e-4
     scheduler: SchedulerType = "cosine"
     warmup_steps: int = 0
+    weight_decay: float = 1e-5
+    use_amp: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
@@ -63,6 +69,8 @@ class FinetuneConfig:
             raise ValueError("finetune_config.lr must be > 0")
         if self.warmup_steps < 0:
             raise ValueError("finetune_config.warmup_steps must be >= 0")
+        if self.weight_decay < 0:
+            raise ValueError("finetune_config.weight_decay must be >= 0")
         if self.scheduler not in ("cosine", "step", "none"):
             raise ValueError("finetune_config.scheduler must be 'cosine', 'step', or 'none'")
 
@@ -75,8 +83,9 @@ class CompressConfig:
     ----------
     method : {"tucker", "cpd"}, default="tucker"
         Decomposition algorithm to use.
-    layers : str | list[str] | Callable[[str, Any], bool], default="all"
+    layers : str | list[str] | Callable[[str, Any], bool] | None, default=None
         Layer selection strategy. Supports:
+        - ``None``: same as "all" (every convolution layer)
         - "all": every convolution layer
         - ``list[str]``: exact layer names
         - ``str``: regular-expression pattern
@@ -95,7 +104,7 @@ class CompressConfig:
     """
 
     method: MethodType = "tucker"
-    layers: LayerSpec = "all"
+    layers: LayerSpec = None
     ranks: RankSpec = "auto"
     use_bn: bool = False
     finetune: bool = False
@@ -146,7 +155,7 @@ class CompressConfig:
             If a callable selector placeholder is provided.
         """
         payload = dict(data)
-        layers = payload.get("layers", "all")
+        layers = payload.get("layers", None)
         if isinstance(layers, dict) and layers.get("__callable__"):
             raise ValueError(
                 "Cannot deserialize callable layer selector automatically. "
@@ -188,7 +197,9 @@ class CompressConfig:
         if self.method not in ("tucker", "cpd"):
             raise ValueError("method must be either 'tucker' or 'cpd'")
 
-        if isinstance(self.layers, str):
+        if self.layers is None:
+            pass
+        elif isinstance(self.layers, str):
             if self.layers != "all":
                 # Validate regex early to fail fast.
                 import re
@@ -202,8 +213,10 @@ class CompressConfig:
                 raise ValueError("layers list must not be empty")
             if not all(isinstance(name, str) and name for name in self.layers):
                 raise ValueError("layers list entries must be non-empty strings")
-        elif not callable(self.layers):
-            raise ValueError("layers must be 'all', regex str, list[str], or callable")
+        elif callable(self.layers):
+            pass
+        else:
+            raise ValueError("layers must be None, 'all', regex str, list[str], or callable")
 
         if isinstance(self.ranks, str):
             if self.ranks != "auto":

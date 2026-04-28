@@ -29,7 +29,7 @@ class LayerSelector:
         list[tuple[str, nn.Module]]
             Matching ``(name, module)`` pairs for ``nn.Conv2d`` layers.
         """
-        if self.spec == "all":
+        if self.spec is None or self.spec == "all":
             return self._all_conv(model)
         if isinstance(self.spec, list):
             return self._by_names(model, self.spec)

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tensorpress"
+version = "0.1.0"
+description = "Tensor factorization compression (Tucker & CPD) for convolutional layers"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "tensorly>=0.8.1",
+    "numpy>=2.0",
+    "scipy>=1.14",
+]
+
+[project.optional-dependencies]
+torch = ["torch>=2.10.0", "torchvision>=0.25.0"]
+rich = ["rich>=13.9"]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
+dev = [
+    "torch>=2.10.0",
+    "torchvision>=0.25.0",
+    "pytest>=8.3",
+    "ruff>=0.9",
+    "mypy>=1.13",
+    "rich>=13.9",
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tensorpress"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tensorpress"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Meaningful default output: one line per test (PASSED/FAILED) + short tracebacks on errors.
+addopts = ["-v", "--tb=short"]
+# TensorLy 0.9.x: solver module docstrings use ``\l`` / ``\_`` in non-raw strings;
+# Python 3.14+ emits SyntaxWarning at import. Harmless; remove when upstream fixes.
+filterwarnings = [
+    "ignore:.*invalid escape sequence.*:SyntaxWarning",
+]
+markers = [
+    "dataset: tests that download/use torchvision datasets; skipped unless explicitly enabled",
+]

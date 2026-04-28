@@ -1,62 +1,101 @@
-## Tensor Decomposition Workspace
-Testing methods to decompose convolutional layer into 3/4 optimized sub-layers which squeeze the model into a much lighter one. 
+# TensorPress
 
-## Goal
-Release a library to perform tensor decomposition on every CNNs. 
+[![PyPI](https://img.shields.io/pypi/v/tensorpress.svg)](https://pypi.org/project/tensorpress/)
+[![CI](https://img.shields.io/badge/ci-pending-lightgrey.svg)](#)
+[![Coverage](https://img.shields.io/badge/coverage-pending-lightgrey.svg)](#)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 
-## Usage 
-There are sevearal ways to use perform layer decomposition with standard or more fine-grained control depending on your requirements. 
+TensorPress compresses PyTorch convolutional neural networks by replacing
+selected `Conv2d` layers with Tucker-2 or CPD tensor factorization modules. It
+keeps the user workflow simple: configure compression intent, run the compressor,
+inspect the result, optionally fine-tune, and export the compressed model.
 
-The easiest way is to let the module decide which compression could be the best for your layer (there's still research ongoing on this topic), like so: 
+## Installation
 
-```python
-from decomposer import pytorch_cp_decomposition
-
-# define your model 
-model = models.alexnet()
-params_original = sum([param.nelement() for param in model.parameters()])
-
-# get a decomposed layer (e.g. model.conv1)
-compressed_layer = pytorch_cp_decomposition(model.conv1)
-# assign the layer to where it belongs in your model 
-model.conv1 = compressed_layer
-
-# Print the comparison between the two models
-params_compressed = sum([param.nelement() for param in model.parameters()])
-print('Number of trainable params before decomposition:', params_before)
-print('Number of trainable params after decomposition:', params_compressed)
-print('Compression: {.3f}x'.format(params_before/params_compressed))
-
-
-
-
+```bash
+pip install tensorpress[torch]
 ```
 
-## TODO
-- MobileNets decomposed 
-- Add procedure to train on CIFAR100 
-- Test the decomposer class 
+For rich terminal reports:
 
-Conviene fare un metodo _make_block che crea un modulo diviso per 4 oppure creare direttamente la rete in maniera normale e poi usare il decomposer con xavier init? cosi uno definisce la sua rete in maniera normale e poi passa tutti i layer di convoluzione al decomposer che restituisce un modello totalmente decomposto con xavier init (con xavier init solo per design, cioè non per i layer che sono pretrainati)
+```bash
+pip install tensorpress[torch,rich]
+```
 
-Probabilmente entrambi.
+## Minimal Example
 
-Others: 
+```python
+from tensorpress import CompressConfig, Compressor
 
+model = MyModel()
 
-- remove logger functions from pytorch_utils and update all the files to use the Logger class 
-- update summarize function in all files 
-- add function to save model weights and model to the logger, by calling it only on the model. 
+cfg = CompressConfig(
+    method="tucker",      # "tucker" or "cpd"
+    layers="all",         # "all", names, regex, or callable
+    ranks="auto",         # "auto", float target, or per-layer dict
+    use_bn=False,
+    finetune=False,
+)
 
-### Decomposer 
-All of this must be done regardless of the decomposition method, so the method can be an option for all of them
+compressor = Compressor(cfg)
+result = compressor.compress(model)
 
-1. create function to decompose a specified layer ==> the layer is specified by the user. 
-    - this function must have different signatures according to the control the user wants to have regarding to rank estimation 
-    - the standard method tries to do the best way, i.e. estimate ranks in the best possible way fast/accuracy 
-    - another method takes in the 'desired compression' and performs the decomposition 
-    - 
-2. create function to decompose all layers, looping on the previous one 
-3. create function to decompose_and_finetune that decomposes the layer and finetune the whole network (but fine-tuning should be an indepentent task)
-    - same versions as 1. 
-    - create function to dec
+result.report()
+result.export("compressed.pt")
+```
+
+With fine-tuning:
+
+```python
+from tensorpress.config import FinetuneConfig
+
+cfg = CompressConfig(
+    method="cpd",
+    layers=lambda name, module: "features" in name,
+    ranks="auto",
+    finetune=True,
+    finetune_config=FinetuneConfig(epochs=3, lr=1e-4),
+)
+
+result = Compressor(cfg).compress(
+    model,
+    dataloader={"train": train_loader, "val": val_loader},
+)
+```
+
+## Documentation
+
+The documentation source lives in [`docs/`](docs/). Build it with:
+
+```bash
+mkdocs build -f docs/mkdocs.yml
+```
+
+Runnable examples are available in [`examples/`](examples/):
+
+```bash
+python examples/quickstart.py --list-datasets
+python examples/quickstart.py
+python examples/quickstart.py --dataset fashion-mnist
+python examples/cifar10_resnet18.py --no-pretrained --head-epochs 1 --ft-epochs 1
+```
+
+Dataset-backed tests are optional and skipped by default:
+
+```bash
+python -m pytest tests/test_datasets.py --run-dataset-tests --dataset-name cifar10
+```
+
+## Contributing
+
+TensorPress is being migrated from research scripts into a library. Keep changes
+small, typed, documented, and covered by tests. Run the test suite before opening
+a pull request:
+
+```bash
+python -m pytest
+```
+
+## License
+
+TensorPress is distributed under the license in [`LICENSE`](LICENSE).

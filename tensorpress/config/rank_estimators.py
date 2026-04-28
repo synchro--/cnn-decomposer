@@ -32,7 +32,10 @@ class RankEstimator:
             Normalized rank tuple.
         """
         if self.spec == "auto":
-            return VBMFEstimator().estimate(layer)
+            raise ValueError(
+                "RankEstimator cannot resolve ranks='auto'; use the active decomposition "
+                "strategy via the compression pipeline (decomp.estimate_ranks)."
+            )
         if isinstance(self.spec, float):
             return self._from_ratio(layer, self.spec)
         if isinstance(self.spec, dict):
@@ -93,12 +96,12 @@ class VBMFEstimator:
         if weights.ndim != 4:
             raise ValueError("VBMFEstimator expects a Conv2d-like 4D weight tensor")
 
-        from VBMF import VBMF
+        from tensorpress._vbmf import EVBMF
 
         unfold_0 = tl.base.unfold(weights, 0)
         unfold_1 = tl.base.unfold(weights, 1)
-        _, diag_0, _, _ = VBMF.EVBMF(unfold_0)
-        _, diag_1, _, _ = VBMF.EVBMF(unfold_1)
+        _, diag_0, _, _ = EVBMF(unfold_0)
+        _, diag_1, _, _ = EVBMF(unfold_1)
 
         rank_out = int(diag_0.shape[0])
         rank_in = int(diag_1.shape[0])

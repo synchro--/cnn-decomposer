@@ -50,9 +50,9 @@ def test_selected_dataset_downloads_and_feeds_tinycnn(pytestconfig: pytest.Confi
         model,
         dataloader={"train": loaders["train"], "val": loaders["val"]},
     )
-    device = next(result.model.parameters()).device
+    device = next(result.parameters()).device
     with torch.no_grad():
-        logits = result.model(inputs.to(device))
+        logits = result(inputs.to(device))
 
     assert logits.shape == (inputs.shape[0], spec.num_classes)
     assert result.trainable_params_after < result.trainable_params_before

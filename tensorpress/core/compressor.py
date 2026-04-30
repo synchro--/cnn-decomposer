@@ -10,6 +10,7 @@ from tensorpress.config import CompressConfig, FinetuneConfig, LayerSelector
 from tensorpress.decompositions import CPDecomposition, TuckerDecomposition
 
 from .pipeline import run_pipeline
+from .result import CompressedModel
 
 _DECOMP_MAP = {
     "tucker": TuckerDecomposition,
@@ -33,7 +34,7 @@ class Compressor:
         *,
         finetune: bool | None = None,
         finetune_config: FinetuneConfig | None = None,
-    ) -> Any:
+    ) -> CompressedModel:
         """Replace selected convolution layers and optionally fine-tune.
 
         Parameters

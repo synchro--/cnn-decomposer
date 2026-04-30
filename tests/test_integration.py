@@ -2,7 +2,7 @@
 
 Ensures the convenience entrypoint builds a :class:`~tensorpress.core.compressor.Compressor`,
 runs compression on a trivial ``Sequential`` of convs, and that
-:class:`~tensorpress.core.result.CompressionResult` reporting helpers run without
+:class:`~tensorpress.core.result.CompressedModel` reporting helpers run without
 raising (plain text if Rich is absent).
 """
 
@@ -31,4 +31,8 @@ def test_compress_function_smoke() -> None:
     y = model(x)
     assert y.shape == (1, 4, 8, 8)
     res.report()
-    res.compare()
+    summary = res.compare()
+    assert isinstance(summary, dict)
+    assert "compression_ratio" in summary
+    out = res(torch.randn(1, 3, 8, 8))
+    assert out.shape == (1, 4, 8, 8)

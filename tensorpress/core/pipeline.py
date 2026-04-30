@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from tensorpress.config import CompressConfig, RankEstimator
 from tensorpress.backends.base import BaseBackend
+from tensorpress.config import CompressConfig, RankEstimator
 from tensorpress.decompositions.base import BaseDecomposition
 
 from .finetuner import FineTuner
 from .replacer import LayerReplacer
-from .result import CompressionResult
+from .result import CompressedModel
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +56,8 @@ def run_pipeline(
     decomp: BaseDecomposition,
     dataloader: Any | None,
     selected_layers: list[tuple[str, Any]],
-) -> CompressionResult:
-    """Run replacement and optional finetuning; return a :class:`CompressionResult`."""
+) -> CompressedModel:
+    """Run replacement and optional finetuning; return a :class:`CompressedModel`."""
     before = backend.count_parameters(model)
 
     rank_map: dict[str, list[int] | int] = {}
@@ -77,7 +77,7 @@ def run_pipeline(
         history = tuner.finetune(model, dataloader)
         log.debug("Finetune complete; %d epochs", len(history))
 
-    return CompressionResult(
+    return CompressedModel(
         model=model,
         layer_stats=layer_stats,
         trainable_params_before=before,

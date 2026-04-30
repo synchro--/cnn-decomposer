@@ -1,6 +1,6 @@
 """Orchestration: compressor, finetuning, and results."""
 
 from .compressor import Compressor
-from .result import CompressionResult
+from .result import CompressedModel
 
-__all__ = ["Compressor", "CompressionResult"]
+__all__ = ["Compressor", "CompressedModel"]

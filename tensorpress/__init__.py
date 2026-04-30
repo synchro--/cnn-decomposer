@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from tensorpress.config import CompressConfig, FinetuneConfig, LayerSelector, RankEstimator
+from tensorpress.core.result import CompressedModel
 
 __all__ = [
     "compress",
     "Compressor",
-    "CompressionResult",
+    "CompressedModel",
     "CompressConfig",
     "FinetuneConfig",
     "LayerSelector",
@@ -22,10 +23,6 @@ def __getattr__(name: str) -> Any:
         from tensorpress.core.compressor import Compressor
 
         return Compressor
-    if name == "CompressionResult":
-        from tensorpress.core.result import CompressionResult
-
-        return CompressionResult
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -39,11 +36,16 @@ def compress(
     dataloader: Any | None = None,
     finetune: bool = False,
     finetune_config: FinetuneConfig | None = None,
-) -> Any:
+) -> CompressedModel:
     """Convenience wrapper around :class:`Compressor`.
 
     Uses :class:`CompressConfig` with ``layers=None`` meaning all conv layers when
     ``layers`` is omitted (via ``None`` inside :class:`CompressConfig` defaults).
+
+    Returns
+    -------
+    CompressedModel
+        Wrapper around the compressed model with reporting and PyTorch proxies.
     """
     from tensorpress.core.compressor import Compressor
 

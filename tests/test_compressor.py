@@ -39,3 +39,46 @@ def test_compressor_tucker_manual_ranks(tiny_model: nn.Module) -> None:
     assert result.layer_stats
     assert after <= before + 1
     assert tiny_model(x).shape == (1, 16, 16, 16)
+
+
+def test_compressed_model_proxies_forward(tiny_model: nn.Module) -> None:
+    """``CompressedModel`` is callable like the inner module."""
+    cfg = CompressConfig(
+        method="tucker",
+        layers=None,
+        ranks={"blocks.0": [2, 2], "blocks.2": [2, 2]},
+        finetune=False,
+    )
+    result = Compressor(cfg).compress(tiny_model)
+    x = torch.randn(1, 3, 16, 16)
+    assert result(x).shape == tiny_model(x).shape
+
+
+def test_compressed_model_eval_train_to_chain(tiny_model: nn.Module) -> None:
+    """``eval`` / ``train`` / ``to`` return ``self`` for chaining."""
+    cfg = CompressConfig(
+        method="tucker",
+        layers=None,
+        ranks={"blocks.0": [2, 2], "blocks.2": [2, 2]},
+        finetune=False,
+    )
+    result = Compressor(cfg).compress(tiny_model)
+    assert result.eval() is result
+    assert result.train(False) is result
+    assert result.to("cpu") is result
+
+
+def test_compressed_model_export(tmp_path, tiny_model: nn.Module) -> None:
+    path = str(tmp_path / "out.pt")
+    result = Compressor(
+        CompressConfig(
+            method="tucker",
+            layers=None,
+            ranks={"blocks.0": [2, 2], "blocks.2": [2, 2]},
+            finetune=False,
+        )
+    ).compress(tiny_model)
+    result.export(path)
+    import os
+
+    assert os.path.isfile(path)

@@ -28,6 +28,7 @@ cfg = CompressConfig(
 )
 
 result = Compressor(cfg).compress(model)
+# result(x) forwards through the wrapped model; use result.model when you need nn.Module APIs.
 result.report()
 result.export("compressed.pt")
 ```
@@ -74,15 +75,14 @@ depthwise, and pointwise.
 
 ## Saving And Loading
 
-`CompressionResult.export()` writes model weights through the active backend:
+`CompressedModel.export()` writes model weights through the active backend:
 
 ```python
 result.export("compressed.pt")
 ```
 
 Load the saved weights with standard PyTorch APIs into the same compressed model
-structure, or keep the returned `result.model` in memory for immediate
-evaluation.
+structure, or call `result(x)` / use `result.model` when you need the raw `nn.Module`.
 
 ## Example Datasets
 

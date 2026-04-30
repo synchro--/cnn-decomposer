@@ -201,7 +201,7 @@ def main() -> None:
     )
     print(f"  compression time: {time.time() - start:.1f}s")
 
-    acc_after = evaluate(result.model, loaders["test"], device)
+    acc_after = evaluate(result, loaders["test"], device)
     ratio = result.trainable_params_before / max(result.trainable_params_after, 1)
 
     print("\nCompression report")

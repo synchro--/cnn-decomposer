@@ -3,7 +3,7 @@
 TensorPress compresses PyTorch convolutional neural networks with tensor
 factorization. It replaces selected `Conv2d` layers with Tucker-2 or CPD factor
 layers, optionally fine-tunes the compressed model, and returns a reportable
-`CompressionResult`.
+`CompressedModel`.
 
 ## Five-Step Flow
 

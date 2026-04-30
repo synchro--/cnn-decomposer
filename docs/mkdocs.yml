@@ -20,7 +20,7 @@ nav:
   - API Reference:
       - Compressor: api/compressor.md
       - CompressConfig: api/config.md
-      - CompressionResult: api/result.md
+      - CompressedModel: api/result.md
       - Decompositions: api/decompositions.md
   - Roadmap: roadmap.md
 

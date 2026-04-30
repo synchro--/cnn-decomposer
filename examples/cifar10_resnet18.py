@@ -175,7 +175,7 @@ def main() -> None:
         dataloader={"train": loaders["train"], "val": loaders["val"]},
     )
 
-    acc_after = evaluate(result.model, loaders["test"], device)
+    acc_after = evaluate(result, loaders["test"], device)
     ratio = result.trainable_params_before / max(result.trainable_params_after, 1)
 
     print("\nCompression report")

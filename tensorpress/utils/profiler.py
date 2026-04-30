@@ -166,7 +166,7 @@ def quick_compare(
     Examples
     --------
     >>> from tensorpress.utils.profiler import quick_compare
-    >>> summary = quick_compare(model, result.model)
+    >>> summary = quick_compare(model, result)  # CompressedModel proxies forward
     >>> print(summary)
     """
     if device is None:

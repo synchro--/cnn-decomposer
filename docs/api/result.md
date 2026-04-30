@@ -1,3 +1,3 @@
-# CompressionResult
+# CompressedModel
 
-::: tensorpress.core.result.CompressionResult
+::: tensorpress.core.result.CompressedModel

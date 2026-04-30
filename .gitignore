@@ -6,10 +6,19 @@ __pycache__/
 # C extensions
 *.so
 
-# Datasets 
+# Datasets
 data/
 checkpoints/
+models/
+dumps/
+
+# Saved weights / artifacts
+*.pt
 *.pth
+*.pth.tar
+*.spth
+*.mat
+compressed_*.pt
 
 # tensorboard logs 
 *.tf 
@@ -109,6 +118,9 @@ venv.bak/
 
 # mkdocs documentation
 /site
+
+# Ruff
+.ruff_cache/
 
 # mypy
 .mypy_cache/

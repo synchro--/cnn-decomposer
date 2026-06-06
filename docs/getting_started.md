@@ -2,14 +2,40 @@
 
 ## Installation
 
+Always install into an isolated environment. Quote the extras in brackets so
+the shell does not try to glob them (zsh fails with `no matches found`
+otherwise), and note that recent system Python installs (Homebrew, Debian)
+refuse a global `pip install` under PEP 668.
+
+### venv + pip
+
 ```bash
-pip install tensorpress[torch]
+python3 -m venv .venv
+source .venv/bin/activate
+pip install 'tensorpress[torch]'
 ```
 
-For richer terminal reports, install:
+For richer terminal reports, add the `rich` extra:
 
 ```bash
-pip install tensorpress[torch,rich]
+pip install 'tensorpress[torch,rich]'
+```
+
+### uv
+
+[uv](https://docs.astral.sh/uv/) creates the environment and resolves
+dependencies in one step:
+
+```bash
+uv venv
+uv pip install 'tensorpress[torch]'
+```
+
+Contributors working from a clone can install the full dev environment from the
+committed `uv.lock`:
+
+```bash
+uv sync --extra dev
 ```
 
 ## Minimal Example

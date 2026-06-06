@@ -148,7 +148,10 @@ class TuckerDecomposition(BaseDecomposition):
         unfold_1 = tl.base.unfold(weights, 1)
         _, diag_0, _, _ = EVBMF(unfold_0)
         _, diag_1, _, _ = EVBMF(unfold_1)
-        ranks = [diag_0.shape[0], diag_1.shape[1]]
+        # Clamp to >= 1 before any compression step: VBMF can retain zero
+        # components for tiny layers, which would make _choose_compression
+        # divide by zero.
+        ranks = [max(1, int(diag_0.shape[0])), max(1, int(diag_1.shape[1]))]
         log.debug("VBMF estimated Tucker ranks: %s", ranks)
 
         if compression_factor:

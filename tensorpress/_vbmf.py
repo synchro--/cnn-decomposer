@@ -57,7 +57,12 @@ def VBMF(Y, cacb, sigma2=None, H=None):
     
     .. [2] Nakajima, Shinichi, et al. "Perfect dimensionality recovery by variational Bayesian PCA." Advances in Neural Information Processing Systems. 2012.
     """    
-    
+
+    # The analytical solution requires L <= M; transpose if needed. Singular
+    # values (and therefore the retained rank) are invariant under transpose.
+    if Y.shape[0] > Y.shape[1]:
+        Y = Y.T
+
     L,M = Y.shape #has to be L<=M
 
     if H is None:
@@ -82,6 +87,11 @@ def VBMF(Y, cacb, sigma2=None, H=None):
             lower_bound = s[-1]**2/M
         else:
             lower_bound = residual/((L-H)*M)
+
+        # Guard against degenerate spectra where the bounds invert; the bounded
+        # optimizer rejects an interval with lower > upper.
+        if lower_bound > upper_bound:
+            lower_bound, upper_bound = upper_bound, lower_bound
 
         sigma2_opt = minimize_scalar(VBsigma2, args=(L,M,cacb,s,residual), bounds=[lower_bound, upper_bound], method='Bounded')
         sigma2 = sigma2_opt.x
@@ -221,6 +231,12 @@ def EVBMF(Y, sigma2=None, H=None):
     
     .. [2] Nakajima, Shinichi, et al. "Perfect dimensionality recovery by variational Bayesian PCA." Advances in Neural Information Processing Systems. 2012.     
     """   
+
+    # The analytical solution requires L <= M; transpose if needed. Singular
+    # values (and therefore the retained rank) are invariant under transpose.
+    if Y.shape[0] > Y.shape[1]:
+        Y = Y.T
+
     L,M = Y.shape #has to be L<=M
 
     if H is None:
@@ -252,6 +268,11 @@ def EVBMF(Y, sigma2=None, H=None):
         residual = residual*scale
         lower_bound = lower_bound*scale
         upper_bound = upper_bound*scale
+
+        # Guard against degenerate spectra where the bounds invert; the bounded
+        # optimizer rejects an interval with lower > upper.
+        if lower_bound > upper_bound:
+            lower_bound, upper_bound = upper_bound, lower_bound
 
         sigma2_opt = minimize_scalar(EVBsigma2, args=(L,M,s,residual,xubar), bounds=[lower_bound, upper_bound], method='Bounded')
         sigma2 = sigma2_opt.x

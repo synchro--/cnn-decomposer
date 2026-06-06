@@ -36,3 +36,27 @@ def test_tucker_fewer_or_equal_params(tiny_conv: torch.nn.Conv2d) -> None:
     orig = sum(p.numel() for p in tiny_conv.parameters())
     compr = sum(p.numel() for p in factorized.parameters())
     assert compr <= orig * 1.05
+
+
+def test_estimate_ranks_single_input_channel() -> None:
+    """VBMF auto-rank estimation must work for a 1-input-channel conv.
+
+    The mode-0 unfolding of a ``Conv2d(1, 32, 3)`` weight is tall (``32 x 9``),
+    violating EVBMF's documented ``L <= M`` precondition. Without the transpose
+    guard this raised ``ValueError: The lower bound exceeds the upper bound``
+    (the fashion-mnist/mnist quickstart crash).
+    """
+    conv = torch.nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False)
+    torch.nn.init.normal_(conv.weight)
+    ranks = TuckerDecomposition().estimate_ranks(conv, compression_factor=0.0)
+    assert len(ranks) == 2
+    assert all(r >= 1 for r in ranks)
+
+
+def test_estimate_ranks_single_input_channel_with_compression() -> None:
+    """The ``--ranks 0.5`` path (compression target) must also work for 1-channel conv."""
+    conv = torch.nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False)
+    torch.nn.init.normal_(conv.weight)
+    ranks = TuckerDecomposition().estimate_ranks(conv, compression_factor=0.5)
+    assert len(ranks) == 2
+    assert all(r >= 1 for r in ranks)

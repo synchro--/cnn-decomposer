@@ -12,15 +12,30 @@ inspect the result, optionally fine-tune, and export the compressed model.
 
 ## Installation
 
+Install into an isolated environment. Quote the extras so your shell does not
+expand the brackets (required in zsh):
+
 ```bash
-pip install tensorpress[torch]
+python3 -m venv .venv
+source .venv/bin/activate
+pip install 'tensorpress[torch]'
 ```
 
 For rich terminal reports:
 
 ```bash
-pip install tensorpress[torch,rich]
+pip install 'tensorpress[torch,rich]'
 ```
+
+Using [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv venv
+uv pip install 'tensorpress[torch]'
+```
+
+See [Getting Started](docs/getting_started.md) for contributor setup with the
+committed lockfile (`uv sync`).
 
 ## Minimal Example
 

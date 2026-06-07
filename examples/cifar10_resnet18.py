@@ -27,6 +27,7 @@ from examples.datasets import (
     get_vision_dataloaders,
     supported_dataset_names,
 )
+from examples.output import make_results_path, save_run_results
 
 
 def resolve_device() -> str:
@@ -124,6 +125,11 @@ def main() -> None:
     parser.add_argument("--test-size", type=int, default=2048)
     parser.add_argument("--data-dir", default="./data")
     parser.add_argument("--export-path", default="compressed_resnet18.pt")
+    parser.add_argument(
+        "--output-dir",
+        default="outputs",
+        help="directory for timestamped JSON result dumps",
+    )
     args = parser.parse_args()
 
     if args.list_datasets:
@@ -186,7 +192,34 @@ def main() -> None:
     print(f"Accuracy delta: {acc_after - acc_before:+.2f} percentage points")
 
     result.export(args.export_path)
+    results_path = save_run_results(
+        make_results_path("resnet18", output_dir=args.output_dir),
+        result=result,
+        run={
+            "example": "cifar10_resnet18",
+            "device": device,
+            "dataset": args.dataset,
+            "method": args.method,
+            "ranks": "auto",
+            "pretrained": args.pretrained,
+            "head_epochs": args.head_epochs,
+            "ft_epochs": args.ft_epochs,
+            "batch_size": args.batch_size,
+            "train_size": args.train_size,
+            "val_size": args.val_size,
+            "test_size": args.test_size,
+            "image_size": img_size,
+        },
+        metrics={
+            "acc_before_pct": round(acc_before, 2),
+            "acc_after_pct": round(acc_after, 2),
+            "acc_delta_pct": round(acc_after - acc_before, 2),
+            "compression_ratio_x": round(ratio, 2),
+        },
+        export_path=args.export_path,
+    )
     print(f"\nSaved compressed model to {args.export_path}")
+    print(f"Saved run results to {results_path}")
 
 
 if __name__ == "__main__":

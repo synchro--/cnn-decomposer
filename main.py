@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 
 from examples.datasets import supported_dataset_names
+from examples.output import make_results_path, save_run_results
 from examples.quickstart import (
     TinyCNN,
     evaluate,
@@ -48,6 +49,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ft-epochs", type=int, default=1, help="post-compression fine-tune epochs")
     parser.add_argument("--use-bn", action="store_true", help="insert BatchNorm between factor layers")
     parser.add_argument("--export-path", default="compressed_main.pt")
+    parser.add_argument(
+        "--output-dir",
+        default="outputs",
+        help="directory for timestamped JSON result dumps",
+    )
     return parser.parse_args()
 
 
@@ -104,7 +110,29 @@ def main() -> None:
     )
 
     result.export(args.export_path)
+    results_path = save_run_results(
+        make_results_path("main", output_dir=args.output_dir),
+        result=result,
+        run={
+            "example": "main",
+            "device": device,
+            "dataset": args.dataset,
+            "method": args.method,
+            "ratio": args.ratio,
+            "epochs": args.epochs,
+            "ft_epochs": args.ft_epochs,
+            "use_bn": args.use_bn,
+        },
+        metrics={
+            "acc_before_pct": round(acc_before, 2),
+            "acc_after_pct": round(acc_after, 2),
+            "acc_delta_pct": round(acc_after - acc_before, 2),
+            "compression_ratio_x": round(result.compression_ratio, 2),
+        },
+        export_path=args.export_path,
+    )
     print(f"\nSaved compressed model to {args.export_path}")
+    print(f"Saved run results to {results_path}")
 
 
 if __name__ == "__main__":

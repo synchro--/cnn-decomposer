@@ -30,6 +30,10 @@ class CompressedModel:
         Per-epoch training loss if finetune=True, else None.
     backend : BaseBackend | None
         Used by ``export()``; may be None in tests.
+    requested_keep_fraction : float | None
+        The keep-fraction target requested via ``compression`` (or the deprecated
+        float ``ranks``), used to report requested-vs-realized. ``None`` for
+        ``"auto"`` or explicit integer ranks.
 
     Examples
     --------
@@ -49,6 +53,7 @@ class CompressedModel:
         trainable_params_after: int,
         finetune_history: list[float] | None = None,
         backend: Any = None,
+        requested_keep_fraction: float | None = None,
     ) -> None:
         self.model = model
         self.layer_stats = layer_stats
@@ -56,6 +61,7 @@ class CompressedModel:
         self.trainable_params_after = trainable_params_after
         self.finetune_history = finetune_history
         self.backend = backend
+        self.requested_keep_fraction = requested_keep_fraction
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Forward pass — delegates to the underlying model."""
@@ -96,28 +102,86 @@ class CompressedModel:
             1.0 - self.trainable_params_after / max(self.trainable_params_before, 1)
         )
 
+    @property
+    def compressed_params_before(self) -> int:
+        """Parameter count of the compressed layers only, before compression."""
+        return sum(int(s["original_params"]) for s in self.layer_stats.values())
+
+    @property
+    def compressed_params_after(self) -> int:
+        """Parameter count of the compressed layers only, after compression."""
+        return sum(int(s["compressed_params"]) for s in self.layer_stats.values())
+
+    @property
+    def subset_compression_ratio(self) -> float:
+        """Compression ratio over the compressed layers only."""
+        return self.compressed_params_before / max(self.compressed_params_after, 1)
+
+    @property
+    def realized_keep_fraction(self) -> float:
+        """Fraction of parameters actually kept across the compressed layers."""
+        return self.compressed_params_after / max(self.compressed_params_before, 1)
+
+    @property
+    def untouched_params(self) -> int:
+        """Trainable parameters in layers that were not compressed."""
+        return max(self.trainable_params_before - self.compressed_params_before, 0)
+
+    @staticmethod
+    def _format_ranks(ranks: Any) -> str:
+        """Render a stored rank value (int for CP, list for Tucker) compactly."""
+        if isinstance(ranks, (list, tuple)):
+            return "x".join(str(int(r)) for r in ranks)
+        return str(int(ranks)) if isinstance(ranks, (int, float)) else str(ranks)
+
     def compare(self) -> dict[str, Any]:
         """Print a summary metrics block and return the metrics dict.
+
+        The summary separates two scopes so an untouched classifier/BN cannot
+        silently hide strong per-layer compression:
+
+        - **compressed layers**: the layers actually factorized, and the keep
+          fraction realized there (versus the requested target, if any).
+        - **whole model**: every trainable parameter, including untouched layers.
 
         Returns
         -------
         dict
-            Keys: ``original_params``, ``compressed_params``,
-            ``compression_ratio``, ``parameter_reduction_pct``.
+            Metrics for both the compressed subset and the whole model.
         """
-        summary = {
-            "original_params": self.trainable_params_before,
-            "compressed_params": self.trainable_params_after,
-            "compression_ratio": round(self.compression_ratio, 3),
-            "parameter_reduction_pct": round(self.parameter_reduction_pct, 1),
+        summary: dict[str, Any] = {
+            "compressed_subset": {
+                "layers": len(self.layer_stats),
+                "params_before": self.compressed_params_before,
+                "params_after": self.compressed_params_after,
+                "compression_ratio": round(self.subset_compression_ratio, 3),
+                "realized_keep_fraction": round(self.realized_keep_fraction, 4),
+                "requested_keep_fraction": self.requested_keep_fraction,
+            },
+            "whole_model": {
+                "params_before": self.trainable_params_before,
+                "params_after": self.trainable_params_after,
+                "compression_ratio": round(self.compression_ratio, 3),
+                "parameter_reduction_pct": round(self.parameter_reduction_pct, 1),
+                "untouched_params": self.untouched_params,
+            },
         }
+        kept = f"{100.0 * self.realized_keep_fraction:.1f}%"
+        if self.requested_keep_fraction is not None:
+            kept += f" (requested {100.0 * self.requested_keep_fraction:.1f}%)"
         lines = [
             "TensorPress comparison",
-            f"  layers touched:     {len(self.layer_stats)}",
-            f"  params before:      {self.trainable_params_before:,}",
-            f"  params after:       {self.trainable_params_after:,}",
-            f"  compression ratio:  {self.compression_ratio:.2f}x",
-            f"  reduction:          {self.parameter_reduction_pct:.1f}%",
+            "  compressed layers:",
+            f"    count:            {len(self.layer_stats)}",
+            f"    params before:    {self.compressed_params_before:,}",
+            f"    params after:     {self.compressed_params_after:,}",
+            f"    compression:      {self.subset_compression_ratio:.2f}x",
+            f"    params kept:      {kept}",
+            "  whole model (includes untouched layers):",
+            f"    params before:    {self.trainable_params_before:,}",
+            f"    params after:     {self.trainable_params_after:,}",
+            f"    compression:      {self.compression_ratio:.2f}x",
+            f"    untouched params: {self.untouched_params:,}",
         ]
         if self.finetune_history:
             lines.append(f"  finetune epochs:    {len(self.finetune_history)}")
@@ -125,42 +189,81 @@ class CompressedModel:
         return summary
 
     def report(self) -> None:
-        """Print a per-layer table. Uses rich if installed, plain text otherwise."""
+        """Print a per-layer table with the chosen ranks, plus subset and
+        whole-model summaries. Uses rich if installed, plain text otherwise.
+
+        Three clearly-separated scopes are shown so that a large untouched layer
+        (e.g. a dense classifier) does not mask strong per-layer compression:
+        each compressed layer with its chosen rank, the compressed-subset
+        aggregate (realized vs requested keep fraction), and the whole-model
+        total with the count of untouched parameters.
+        """
+        kept = f"{100.0 * self.realized_keep_fraction:.1f}%"
+        if self.requested_keep_fraction is not None:
+            kept += f" (req {100.0 * self.requested_keep_fraction:.1f}%)"
+
         try:
             from rich.console import Console
             from rich.table import Table
 
             table = Table(title="TensorPress — Compression Report")
             table.add_column("Layer", style="cyan")
+            table.add_column("Rank", justify="right", style="magenta")
             table.add_column("Before", justify="right")
             table.add_column("After", justify="right")
             table.add_column("Ratio", justify="right", style="green")
             for name, stats in self.layer_stats.items():
                 table.add_row(
                     name,
+                    self._format_ranks(stats.get("ranks")),
                     f"{stats['original_params']:,}",
                     f"{stats['compressed_params']:,}",
                     f"{stats['ratio']:.2f}x",
                 )
+            table.add_section()
             table.add_row(
-                "[bold]TOTAL[/bold]",
+                "[bold]Compressed layers[/bold]",
+                "",
+                f"[bold]{self.compressed_params_before:,}[/bold]",
+                f"[bold]{self.compressed_params_after:,}[/bold]",
+                f"[bold]{self.subset_compression_ratio:.2f}x[/bold]",
+            )
+            table.add_row(
+                "[bold]Whole model[/bold]",
+                "",
                 f"[bold]{self.trainable_params_before:,}[/bold]",
                 f"[bold]{self.trainable_params_after:,}[/bold]",
                 f"[bold]{self.compression_ratio:.2f}x[/bold]",
             )
-            Console().print(table)
+            console = Console()
+            console.print(table)
+            console.print(
+                f"Compressed {len(self.layer_stats)} layer(s); kept {kept} of their params. "
+                f"{self.untouched_params:,} param(s) in untouched layers "
+                f"(e.g. classifier/BN) dilute the whole-model ratio."
+            )
         except ImportError:
-            print(f"\n{'Layer':<40} {'Before':>10} {'After':>10} {'Ratio':>8}")
-            print("-" * 70)
+            print(f"\n{'Layer':<36} {'Rank':>10} {'Before':>10} {'After':>10} {'Ratio':>8}")
+            print("-" * 78)
             for name, stats in self.layer_stats.items():
                 print(
-                    f"{name:<40} {stats['original_params']:>10,} "
+                    f"{name:<36} {self._format_ranks(stats.get('ranks')):>10} "
+                    f"{stats['original_params']:>10,} "
                     f"{stats['compressed_params']:>10,} {stats['ratio']:>7.2f}x"
                 )
-            print("-" * 70)
+            print("-" * 78)
             print(
-                f"{'TOTAL':<40} {self.trainable_params_before:>10,} "
+                f"{'Compressed layers':<36} {'':>10} {self.compressed_params_before:>10,} "
+                f"{self.compressed_params_after:>10,} {self.subset_compression_ratio:>7.2f}x"
+            )
+            print(
+                f"{'Whole model':<36} {'':>10} {self.trainable_params_before:>10,} "
                 f"{self.trainable_params_after:>10,} {self.compression_ratio:>7.2f}x"
+            )
+            print("-" * 78)
+            print(
+                f"Compressed {len(self.layer_stats)} layer(s); kept {kept} of their params. "
+                f"{self.untouched_params:,} param(s) in untouched layers dilute the whole-model ratio."
             )
 
     def export(self, path: str) -> None:

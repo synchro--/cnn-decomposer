@@ -23,14 +23,22 @@ def _resolve_ranks_list(
     decomp: BaseDecomposition,
 ) -> list[int]:
     """Return ranks as a flat list of positive integers for normalization."""
+    keep = config.effective_keep_fraction()
+    if keep is not None:
+        return decomp.ranks_for_keep_fraction(layer, keep)
+
     spec = config.ranks
     if isinstance(spec, dict):
         est = RankEstimator(spec).estimate(layer_name, layer)
         return list(est)
     if spec == "auto":
-        return decomp.estimate_ranks(layer, compression_factor=0.0)
-    if isinstance(spec, float):
-        return decomp.estimate_ranks(layer, compression_factor=spec)
+        return decomp.estimate_ranks(layer)
+    if isinstance(spec, bool):
+        raise ValueError(f"unsupported ranks configuration: {spec!r}")
+    if isinstance(spec, int):
+        return [spec]
+    if isinstance(spec, (list, tuple)):
+        return list(spec)
     raise ValueError(f"unsupported ranks configuration: {spec!r}")
 
 
@@ -84,4 +92,5 @@ def run_pipeline(
         trainable_params_after=after,
         finetune_history=history,
         backend=backend,
+        requested_keep_fraction=config.effective_keep_fraction(),
     )

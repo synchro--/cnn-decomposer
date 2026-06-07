@@ -33,6 +33,7 @@ def test_compress_function_smoke() -> None:
     res.report()
     summary = res.compare()
     assert isinstance(summary, dict)
-    assert "compression_ratio" in summary
+    assert "compression_ratio" in summary["whole_model"]
+    assert "compression_ratio" in summary["compressed_subset"]
     out = res(torch.randn(1, 3, 8, 8))
     assert out.shape == (1, 4, 8, 8)

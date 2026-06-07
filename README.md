@@ -101,6 +101,39 @@ Dataset-backed tests are optional and skipped by default:
 python -m pytest tests/test_datasets.py --run-dataset-tests --dataset-name cifar10
 ```
 
+## Example Results
+
+Tucker-2 compression of the quickstart `TinyCNN` on **Fashion-MNIST**
+(2,048 train / 1,024 test samples, 8 baseline epochs, 3 fine-tune epochs).
+The `--ranks` float is a target parameter-retention fraction in `(0, 1]`; the
+reported compression is the achieved parameter reduction.
+
+| `--ranks` | Baseline acc | Compressed acc | Δ accuracy | Compression |
+| --- | --- | --- | --- | --- |
+| `0.2` | 60.4% | 56.8% | −3.6 pp | 8.7× |
+| **`0.35`** | **60.5%** | **59.1%** | **−1.5 pp** | **9.8×** |
+| `0.5` | 60.4% | 58.8% | −1.7 pp | 8.9× |
+| `0.65` | 60.4% | 56.4% | −3.9 pp | 9.1× |
+| **`1.0`** | **58.7%** | **55.6%** | **−3.1 pp** | **12.0×** |
+
+Highlights:
+
+- **Best accuracy-to-compression trade-off:** `--ranks 0.35` keeps **59.1%**
+  accuracy (only **−1.5 pp**) while shrinking the convolutions **9.8×**.
+- **Highest compression:** `--ranks 1.0` reaches **12.0×** at a modest
+  **−3.1 pp** accuracy cost.
+
+Reproduce the sweet spot with:
+
+```bash
+python examples/quickstart.py \
+  --dataset fashion-mnist --epochs 8 --ft-epochs 3 --ranks 0.35
+```
+
+> Fine-tuning matters: without it (`--ft-epochs 0`) the same `--ranks 0.5`
+> run drops from −1.7 pp to roughly −32 pp, so always fine-tune after
+> aggressive compression.
+
 ## Contributing
 
 TensorPress is being migrated from research scripts into a library. Keep changes

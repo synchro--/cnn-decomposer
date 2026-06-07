@@ -48,15 +48,15 @@ def test_estimate_ranks_single_input_channel() -> None:
     """
     conv = torch.nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False)
     torch.nn.init.normal_(conv.weight)
-    ranks = TuckerDecomposition().estimate_ranks(conv, compression_factor=0.0)
+    ranks = TuckerDecomposition().estimate_ranks(conv)
     assert len(ranks) == 2
     assert all(r >= 1 for r in ranks)
 
 
-def test_estimate_ranks_single_input_channel_with_compression() -> None:
-    """The ``--ranks 0.5`` path (compression target) must also work for 1-channel conv."""
+def test_keep_fraction_single_input_channel() -> None:
+    """The keep-fraction path must also work for a 1-channel conv."""
     conv = torch.nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=False)
     torch.nn.init.normal_(conv.weight)
-    ranks = TuckerDecomposition().estimate_ranks(conv, compression_factor=0.5)
+    ranks = TuckerDecomposition().ranks_for_keep_fraction(conv, 0.5)
     assert len(ranks) == 2
     assert all(r >= 1 for r in ranks)

@@ -119,6 +119,16 @@ def main() -> None:
     parser.add_argument("--head-epochs", type=int, default=1)
     parser.add_argument("--ft-epochs", type=int, default=1)
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
+    parser.add_argument(
+        "--compression",
+        type=float,
+        default=0.1,
+        help=(
+            "Keep-fraction target in (0, 1] for the compressed conv layers. "
+            "Lower keeps fewer params -> smaller rank -> far less decomposition "
+            "RAM (important for CPD, which OOMs at large ranks on host memory)."
+        ),
+    )
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--train-size", type=int, default=4096)
     parser.add_argument("--val-size", type=int, default=1024)
@@ -164,7 +174,7 @@ def main() -> None:
     cfg = CompressConfig(
         method=args.method,
         layers=lambda name, module: "layer" in name and isinstance(module, nn.Conv2d),
-        ranks="auto",
+        compression=args.compression,
         use_bn=False,
         finetune=args.ft_epochs > 0,
         finetune_config=FinetuneConfig(
@@ -200,7 +210,7 @@ def main() -> None:
             "device": device,
             "dataset": args.dataset,
             "method": args.method,
-            "ranks": "auto",
+            "compression": args.compression,
             "pretrained": args.pretrained,
             "head_epochs": args.head_epochs,
             "ft_epochs": args.ft_epochs,

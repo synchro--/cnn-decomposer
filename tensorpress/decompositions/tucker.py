@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 import numpy as np
 import tensorly as tl
@@ -125,16 +126,14 @@ class TuckerDecomposition(BaseDecomposition):
             ]
         return nn.Sequential(*layers)
 
-    def estimate_ranks(self, layer: nn.Conv2d, compression_factor: float = 0.0) -> list[int]:
+    def estimate_ranks(self, layer: nn.Conv2d) -> list[int]:
         """
-        Estimate Tucker ranks with VBMF and optional compression enforcement.
+        Estimate Tucker ranks automatically with VBMF on the kernel unfoldings.
 
         Parameters
         ----------
         layer : nn.Conv2d
             Input convolution layer.
-        compression_factor : float, default=0.0
-            Target compression ratio.
 
         Returns
         -------
@@ -148,38 +147,52 @@ class TuckerDecomposition(BaseDecomposition):
         unfold_1 = tl.base.unfold(weights, 1)
         _, diag_0, _, _ = EVBMF(unfold_0)
         _, diag_1, _, _ = EVBMF(unfold_1)
-        # Clamp to >= 1 before any compression step: VBMF can retain zero
-        # components for tiny layers, which would make _choose_compression
-        # divide by zero.
+        # Clamp to >= 1: VBMF can retain zero components for tiny layers.
         ranks = [max(1, int(diag_0.shape[0])), max(1, int(diag_1.shape[1]))]
         log.debug("VBMF estimated Tucker ranks: %s", ranks)
-
-        if compression_factor:
-            ranks = self._choose_compression(layer, ranks, compression_factor)
-        return [max(1, int(ranks[0])), max(1, int(ranks[1]))]
-
-    @staticmethod
-    def _choose_compression(
-        layer: nn.Conv2d, ranks: list[int], compression_factor: float = 2.0
-    ) -> list[int]:
-        """Enforce a minimum compression target for Tucker-2 ranks."""
-        weights = layer.weight.data.cpu().numpy()
-        t = weights.shape[0]
-        s = weights.shape[1]
-        d = weights.shape[2]
-
-        compression = (d**2 * s * t) / (s * ranks[0] + ranks[0] * ranks[1] * (d**2) + t * ranks[1])
-        ranks[0] = ranks[0] * 3
-        if compression <= 2:
-            while compression <= compression_factor:
-                ranks[0] = ranks[0] // 2
-                ranks[1] = ranks[1] // 2
-                if ranks[0] < 1 or ranks[1] < 1:
-                    ranks[0] = max(1, ranks[0])
-                    ranks[1] = max(1, ranks[1])
-                    break
-                compression = (d**2 * s * t) / (
-                    s * ranks[0] + ranks[0] * ranks[1] * (d**2) + t * ranks[1]
-                )
-        log.debug("Compression factor for layer %s: %s", weights.shape, compression)
         return ranks
+
+    def ranks_for_keep_fraction(self, layer: nn.Conv2d, keep: float) -> list[int]:
+        """
+        Solve for Tucker ranks ``[R_out, R_in]`` that keep ``keep`` of the params.
+
+        A Tucker-2 conv has approximately ``S*R_in + R_in*R_out*Kh*Kw + R_out*T``
+        parameters versus the original ``T*S*Kh*Kw``. We scale both ranks by a
+        single factor ``alpha`` proportional to their mode sizes
+        (``R_out = alpha*T``, ``R_in = alpha*S``), which reduces the budget
+        equation to a quadratic in ``alpha`` that we solve in closed form.
+
+        Parameters
+        ----------
+        layer : nn.Conv2d
+            Input convolution layer.
+        keep : float
+            Target fraction of parameters to retain, in (0, 1].
+
+        Returns
+        -------
+        list[int]
+            Tucker ranks ``[R_out, R_in]``.
+        """
+        if not (0.0 < keep <= 1.0):
+            raise ValueError("keep fraction must be in range (0, 1]")
+
+        out_ch, in_ch, kh, kw = (int(v) for v in layer.weight.shape)
+        spatial = kh * kw
+
+        # a*alpha^2 + b*alpha - c = 0, with R_out=alpha*out, R_in=alpha*in.
+        a = float(in_ch * out_ch * spatial)
+        b = float(in_ch * in_ch + out_ch * out_ch)
+        c = float(keep * out_ch * in_ch * spatial)
+        alpha = (-b + math.sqrt(b * b + 4.0 * a * c)) / (2.0 * a)
+
+        rank_out = max(1, min(out_ch, int(round(alpha * out_ch))))
+        rank_in = max(1, min(in_ch, int(round(alpha * in_ch))))
+        log.debug(
+            "Tucker keep=%.4f -> ranks=[%d, %d] (shape=%s)",
+            keep,
+            rank_out,
+            rank_in,
+            layer.weight.shape,
+        )
+        return [rank_out, rank_in]

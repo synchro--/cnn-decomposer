@@ -116,16 +116,14 @@ class CPDecomposition(BaseDecomposition):
             ]
         return nn.Sequential(*layers)
 
-    def estimate_ranks(self, layer: nn.Conv2d, compression_factor: float = 0.0) -> list[int]:
+    def estimate_ranks(self, layer: nn.Conv2d) -> list[int]:
         """
-        Estimate CP rank with VBMF and optional compression enforcement.
+        Estimate CP rank automatically with VBMF on the kernel unfoldings.
 
         Parameters
         ----------
         layer : nn.Conv2d
             Input convolution layer.
-        compression_factor : float, default=0.0
-            Target compression ratio.
 
         Returns
         -------
@@ -142,31 +140,45 @@ class CPDecomposition(BaseDecomposition):
         rank = max(diag_0.shape[0], diag_1.shape[0])
         if rank == 0:
             rank = 10
-        ranks = [rank, rank]
-
-        if compression_factor:
-            ranks = self._choose_compression(layer, ranks, compression_factor)
-            rank = int(ranks[0])
 
         log.debug("VBMF estimated CP rank: %d", rank)
         return [max(int(rank), 1)]
 
-    @staticmethod
-    def _choose_compression(
-        layer: nn.Conv2d, ranks: list[int], compression_factor: float = 2.0
-    ) -> list[int]:
-        """Enforce a minimum compression target for CP rank."""
-        weights = layer.weight.data.cpu().numpy()
-        t = weights.shape[0]
-        s = weights.shape[1]
-        d = weights.shape[2]
+    def ranks_for_keep_fraction(self, layer: nn.Conv2d, keep: float) -> list[int]:
+        """
+        Solve for the CP rank that keeps ``keep`` fraction of the layer params.
 
-        rank = ranks[0]
-        compression = (d**2 * t * s) / (rank * (s + 2 * d + t))
-        if compression <= compression_factor:
-            rank = (d**2 * s * t) / (compression_factor * (s + 2 * d + t))
-            ranks[0] = max(int(np.floor(rank)), 1)
-            ranks[1] = ranks[0]
-            compression = (d**2 * s * t) / (max(rank, 1.0) * (s + 2 * d + t))
-        log.debug("Compression factor for layer %s: %s", weights.shape, compression)
-        return ranks
+        For a CP-factorized conv the parameter count is approximately
+        ``R * (S + Kh + Kw + T)`` (the two pointwise plus two depthwise convs),
+        while the original conv has ``T * S * Kh * Kw`` parameters. Setting their
+        ratio to ``keep`` and solving for ``R`` gives the returned rank.
+
+        Notes
+        -----
+        Because CP's per-rank cost ``(S + Kh + Kw + T)`` is small relative to the
+        dense kernel, hitting a high keep fraction requires a large rank (and a
+        correspondingly expensive PARAFAC fit). Smaller ``keep`` values yield
+        smaller ranks and far lower decomposition memory/time.
+
+        Parameters
+        ----------
+        layer : nn.Conv2d
+            Input convolution layer.
+        keep : float
+            Target fraction of parameters to retain, in (0, 1].
+
+        Returns
+        -------
+        list[int]
+            CP rank in ``[R]`` form.
+        """
+        if not (0.0 < keep <= 1.0):
+            raise ValueError("keep fraction must be in range (0, 1]")
+
+        out_ch, in_ch, kh, kw = (int(v) for v in layer.weight.shape)
+        original = out_ch * in_ch * kh * kw
+        per_rank = in_ch + kh + kw + out_ch
+        rank = int(round(keep * original / max(per_rank, 1)))
+        rank = max(rank, 1)
+        log.debug("CP keep=%.4f -> rank=%d (shape=%s)", keep, rank, layer.weight.shape)
+        return [rank]

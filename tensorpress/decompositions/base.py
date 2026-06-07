@@ -30,19 +30,36 @@ class BaseDecomposition(ABC):
         """
 
     @abstractmethod
-    def estimate_ranks(self, layer: Any, compression_factor: float = 0.0) -> list[int]:
+    def estimate_ranks(self, layer: Any) -> list[int]:
         """
-        Estimate decomposition rank(s), optionally enforcing compression.
+        Estimate decomposition rank(s) automatically (VBMF heuristic).
 
         Parameters
         ----------
         layer : Any
             Original convolution layer to compress.
-        compression_factor : float, default=0.0
-            Desired compression ratio. If 0, keep raw VBMF estimates.
 
         Returns
         -------
         list[int]
             Estimated rank values.
+        """
+
+    @abstractmethod
+    def ranks_for_keep_fraction(self, layer: Any, keep: float) -> list[int]:
+        """
+        Solve for the rank(s) that retain ``keep`` fraction of the layer params.
+
+        Parameters
+        ----------
+        layer : Any
+            Original convolution layer to compress.
+        keep : float
+            Target fraction of this layer's parameters to keep, in (0, 1].
+            ``0.25`` keeps roughly a quarter of the parameters.
+
+        Returns
+        -------
+        list[int]
+            Rank values realizing (approximately) the requested keep fraction.
         """

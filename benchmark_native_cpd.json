@@ -1,0 +1,34 @@
+[
+  {
+    "dataset": "fashion-mnist",
+    "model": "fashion-lenet",
+    "params": 3565002,
+    "conv_params": 2510784,
+    "fc_params": 1054218,
+    "acc_after_train": 89.55
+  },
+  {
+    "dataset": "fashion-mnist",
+    "model": "cpd-all-conv",
+    "params": 52266,
+    "conv_params": 52266,
+    "fc_params": 0,
+    "acc_after_train": 83.625
+  },
+  {
+    "dataset": "cifar100",
+    "model": "fashion-lenet",
+    "params": 3617572,
+    "conv_params": 2517184,
+    "fc_params": 1100388,
+    "acc_after_train": 16.875
+  },
+  {
+    "dataset": "cifar100",
+    "model": "cpd-all-conv",
+    "params": 98532,
+    "conv_params": 98532,
+    "fc_params": 0,
+    "acc_after_train": 17.575
+  }
+]

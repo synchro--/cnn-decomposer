@@ -38,9 +38,16 @@ class FineTuner:
             A single training :class:`~torch.utils.data.DataLoader`, or
             ``{\"train\": loader, \"val\": optional_val_loader}``.
         """
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-        )
+        if self.config.device is not None:
+            device = torch.device(self.config.device)
+        else:
+            device = torch.device(
+                "cuda"
+                if torch.cuda.is_available()
+                else "mps"
+                if torch.backends.mps.is_available()
+                else "cpu"
+            )
         logger.debug(
             "FineTuner device=%s epochs=%d lr=%g",
             device,

@@ -31,6 +31,9 @@ class FinetuneConfig:
         AdamW weight decay.
     use_amp : bool, default=False
         If True and CUDA is available, enable automatic mixed precision.
+    device : str | None, default=None
+        Device for fine-tuning (``\"cpu\"``, ``\"cuda\"``, ``\"mps\"``). When
+        ``None``, auto-selects CUDA → MPS → CPU.
     """
 
     epochs: int = 5
@@ -39,6 +42,7 @@ class FinetuneConfig:
     warmup_steps: int = 0
     weight_decay: float = 1e-5
     use_amp: bool = False
+    device: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""

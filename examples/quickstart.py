@@ -1,6 +1,6 @@
 """TensorPress quickstart.
 
-Compress a vision CNN (``FashionLeNet`` by default, or ``TinyCNN``) with
+Compress a vision CNN (``FashionLeNet`` by default, ``FashionLeNetCompact``, or ``TinyCNN``) with
 Tucker or CPD decomposition, optionally fine-tune it, and compare accuracy
 before and after compression.
 

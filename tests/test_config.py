@@ -42,36 +42,44 @@ def test_invalid_method() -> None:
         CompressConfig(method="bad").validate()
 
 
-def test_compression_keep_fraction_resolves() -> None:
-    """A ``compression`` target resolves to a keep fraction; ranks stay 'auto'."""
-    cfg = CompressConfig(compression=0.25)
+def test_compression_ratio_resolves() -> None:
+    """A ``compression_ratio`` target resolves to itself; ranks stay 'auto'."""
+    cfg = CompressConfig(compression_ratio=4.0)
     cfg.validate()
-    assert cfg.effective_keep_fraction() == pytest.approx(0.25)
+    assert cfg.effective_compression_ratio() == pytest.approx(4.0)
 
 
-def test_compression_out_of_range_rejected() -> None:
-    """``compression`` must lie in (0, 1]."""
+def test_compression_ratio_out_of_range_rejected() -> None:
+    """``compression_ratio`` must be >= 1."""
     with pytest.raises(ValueError):
-        CompressConfig(compression=1.5).validate()
+        CompressConfig(compression_ratio=0.5).validate()
     with pytest.raises(ValueError):
-        CompressConfig(compression=0.0).validate()
+        CompressConfig(compression_ratio=0.0).validate()
 
 
-def test_compression_and_explicit_ranks_mutually_exclusive() -> None:
-    """Setting both ``compression`` and explicit ``ranks`` is an error."""
+def test_compression_ratio_and_blanket_ranks_mutually_exclusive() -> None:
+    """A blanket int/list ``ranks`` conflicts with ``compression_ratio``."""
     with pytest.raises(ValueError):
-        CompressConfig(compression=0.5, ranks=8).validate()
+        CompressConfig(compression_ratio=4.0, ranks=8).validate()
+    with pytest.raises(ValueError):
+        CompressConfig(compression_ratio=4.0, ranks=[8, 8]).validate()
 
 
-def test_explicit_int_ranks_have_no_keep_fraction() -> None:
+def test_compression_ratio_with_dict_ranks_allowed() -> None:
+    """A per-layer ranks dict may coexist with ``compression_ratio`` (override)."""
+    cfg = CompressConfig(compression_ratio=4.0, ranks={"layer1": [8, 8]})
+    cfg.validate()
+    assert cfg.effective_compression_ratio() == pytest.approx(4.0)
+
+
+def test_explicit_int_ranks_have_no_ratio() -> None:
     """Explicit integer ranks are a distinct (power-user) knob, not a target."""
     cfg = CompressConfig(ranks=8)
     cfg.validate()
-    assert cfg.effective_keep_fraction() is None
+    assert cfg.effective_compression_ratio() is None
 
 
-def test_deprecated_float_ranks_is_keep_fraction() -> None:
-    """A float ``ranks`` remains accepted as a deprecated keep-fraction alias."""
-    cfg = CompressConfig(ranks=0.5)
-    cfg.validate()
-    assert cfg.effective_keep_fraction() == pytest.approx(0.5)
+def test_float_ranks_rejected() -> None:
+    """The deprecated float ``ranks`` keep-fraction alias is no longer accepted."""
+    with pytest.raises(ValueError):
+        CompressConfig(ranks=0.5).validate()

@@ -24,8 +24,8 @@ import argparse
 
 from examples.datasets import supported_dataset_names
 from examples.output import make_results_path, save_run_results
+from examples.fashion_lenet import build_example_model, supported_example_models
 from examples.quickstart import (
-    TinyCNN,
     evaluate,
     get_dataloaders,
     resolve_device,
@@ -44,6 +44,11 @@ def parse_args() -> argparse.Namespace:
         help="Target N-fold size reduction (>= 1); e.g. 2.0 makes layers ~2x smaller",
     )
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
+    parser.add_argument(
+        "--model",
+        default="fashion-lenet",
+        choices=supported_example_models(),
+    )
     parser.add_argument("--dataset", default="cifar10", choices=supported_dataset_names())
     parser.add_argument("--epochs", type=int, default=1, help="baseline training epochs")
     parser.add_argument("--ft-epochs", type=int, default=1, help="post-compression fine-tune epochs")
@@ -62,13 +67,17 @@ def main() -> None:
     device = resolve_device()
     print(
         f"TensorPress demo  device={device}  dataset={args.dataset}  "
-        f"method={args.method}  compression_ratio={args.compression_ratio}\n"
+        f"method={args.method}  model={args.model}  compression_ratio={args.compression_ratio}\n"
     )
 
     loaders, in_channels, num_classes = get_dataloaders(dataset=args.dataset)
 
-    print(f"Training TinyCNN baseline for {args.epochs} epoch(s)...")
-    model = TinyCNN(input_channels=in_channels, num_classes=num_classes)
+    print(f"Training {args.model} baseline for {args.epochs} epoch(s)...")
+    model = build_example_model(
+        args.model,
+        input_channels=in_channels,
+        num_classes=num_classes,
+    )
     train(model, loaders, epochs=args.epochs, device=device)
 
     acc_before = evaluate(model, loaders["test"], device)
@@ -116,6 +125,7 @@ def main() -> None:
             "device": device,
             "dataset": args.dataset,
             "method": args.method,
+            "model": args.model,
             "compression_ratio": args.compression_ratio,
             "epochs": args.epochs,
             "ft_epochs": args.ft_epochs,

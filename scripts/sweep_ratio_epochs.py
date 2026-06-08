@@ -12,7 +12,8 @@ import json
 import time
 from dataclasses import asdict, dataclass
 
-from examples.quickstart import TinyCNN, evaluate, get_dataloaders, train
+from examples.fashion_lenet import build_example_model, supported_example_models
+from examples.quickstart import evaluate, get_dataloaders, train
 from tensorpress import CompressConfig, Compressor
 from tensorpress.config import FinetuneConfig
 
@@ -20,6 +21,7 @@ from tensorpress.config import FinetuneConfig
 @dataclass
 class SweepRow:
     dataset: str
+    model: str
     method: str
     compression_ratio: float | str
     baseline_epochs: int
@@ -38,6 +40,7 @@ class SweepRow:
 def run_one(
     *,
     dataset: str,
+    model_name: str,
     method: str,
     compression_ratio: float | str,
     baseline_epochs: int,
@@ -49,7 +52,11 @@ def run_one(
     loaders, in_channels, num_classes = get_dataloaders(
         dataset=dataset, train_size=train_size, test_size=test_size
     )
-    model = TinyCNN(input_channels=in_channels, num_classes=num_classes)
+    model = build_example_model(
+        model_name,
+        input_channels=in_channels,
+        num_classes=num_classes,
+    )
 
     t0 = time.time()
     train(model, loaders, epochs=baseline_epochs, device=device)
@@ -82,11 +89,12 @@ def run_one(
 
     acc_after = evaluate(result, loaders["test"], device)
     params_after = result.trainable_params_after
-    compression_x = params_before / max(params_after, 1)
-    param_reduction_pct = 100.0 * (1.0 - params_after / max(params_before, 1))
+    compression_x = result.subset_compression_ratio
+    param_reduction_pct = result.parameter_reduction_pct
 
     return SweepRow(
         dataset=dataset,
+        model=model_name,
         method=method,
         compression_ratio=compression_ratio,
         baseline_epochs=baseline_epochs,
@@ -106,6 +114,11 @@ def run_one(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--datasets", nargs="+", default=["cifar10", "fashion-mnist"])
+    parser.add_argument(
+        "--model",
+        default="fashion-lenet",
+        choices=supported_example_models(),
+    )
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
     parser.add_argument(
         "--compression-ratios",
@@ -141,6 +154,7 @@ def main() -> None:
                     )
                     row = run_one(
                         dataset=dataset,
+                        model_name=args.model,
                         method=args.method,
                         compression_ratio=compression_ratio,
                         baseline_epochs=baseline_epochs,

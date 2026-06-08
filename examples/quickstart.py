@@ -1,12 +1,14 @@
 """TensorPress quickstart.
 
-Compress a tiny vision CNN with Tucker or CPD decomposition, optionally
-fine-tune it, and compare accuracy before and after compression.
+Compress a vision CNN (``FashionLeNet`` by default, or ``TinyCNN``) with
+Tucker or CPD decomposition, optionally fine-tune it, and compare accuracy
+before and after compression.
 
 Usage
 -----
 python examples/quickstart.py
-python examples/quickstart.py --method cpd --epochs 3 --ft-epochs 1
+python examples/quickstart.py --model fashion-lenet --dataset fashion-mnist
+python examples/quickstart.py --model tinycnn --method cpd --epochs 3 --ft-epochs 1
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from examples.datasets import (
     get_vision_dataloaders,
     supported_dataset_names,
 )
+from examples.fashion_lenet import build_example_model, supported_example_models
 from examples.output import make_results_path, save_run_results
 
 
@@ -138,6 +141,12 @@ def main() -> None:
     parser.add_argument("--dataset", default="cifar10", choices=supported_dataset_names())
     parser.add_argument("--list-datasets", action="store_true", help="list supported datasets and exit")
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
+    parser.add_argument(
+        "--model",
+        default="fashion-lenet",
+        choices=supported_example_models(),
+        help="example architecture to train and compress",
+    )
     parser.add_argument("--ranks", default="auto", help="manual rank spec: 'auto' or an integer")
     parser.add_argument(
         "--compression-ratio",
@@ -173,7 +182,7 @@ def main() -> None:
     )
     print(
         f"\nTensorPress quickstart: device={device} dataset={args.dataset} "
-        f"method={args.method} {target}\n"
+        f"model={args.model} method={args.method} {target}\n"
     )
 
     print(f"Loading {args.dataset}...")
@@ -186,8 +195,12 @@ def main() -> None:
         test_size=args.test_size,
     )
 
-    print(f"\nTraining TinyCNN for {args.epochs} epoch(s)...")
-    model = TinyCNN(input_channels=input_channels, num_classes=num_classes)
+    print(f"\nTraining {args.model} for {args.epochs} epoch(s)...")
+    model = build_example_model(
+        args.model,
+        input_channels=input_channels,
+        num_classes=num_classes,
+    )
     start = time.time()
     train(model, loaders, epochs=args.epochs, device=device)
     print(f"  training time: {time.time() - start:.1f}s")
@@ -237,6 +250,7 @@ def main() -> None:
             "example": "quickstart",
             "device": device,
             "dataset": args.dataset,
+            "model": args.model,
             "method": args.method,
             "ranks": args.ranks,
             "compression_ratio": args.compression_ratio,

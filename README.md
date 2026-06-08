@@ -91,7 +91,7 @@ Runnable examples are available in [`examples/`](examples/):
 ```bash
 python examples/quickstart.py --list-datasets
 python examples/quickstart.py
-python examples/quickstart.py --dataset fashion-mnist
+python examples/quickstart.py --model fashion-lenet --dataset fashion-mnist
 python examples/cifar10_resnet18.py --no-pretrained --head-epochs 1 --ft-epochs 1
 ```
 
@@ -103,38 +103,59 @@ python -m pytest tests/test_datasets.py --run-dataset-tests --dataset-name cifar
 
 ## Example Results
 
-Tucker-2 compression of the quickstart `TinyCNN` on **Fashion-MNIST**
-(10,000 train / 4,000 test samples, 10 baseline epochs, 5 fine-tune epochs).
-`--compression-ratio` is the requested N-fold size reduction for the compressed
-conv layers; the "Compression" column is the achieved reduction on those layers.
+Tucker-2 compression of the quickstart **`FashionLeNet`** (~3.6M parameters:
+**2.5M** in four conv layers, **1.1M** in the untouched FC head) on
+**Fashion-MNIST** (10,000 train / 4,000 test samples, 10 baseline epochs,
+5 fine-tune epochs). `--compression-ratio` is the requested N-fold size
+reduction for the **conv stack**; the "Compression" column is the realized
+ratio on those layers (the dense classifier dilutes the whole-model number).
 
-| `--compression-ratio` | Baseline acc | Compressed acc | Δ accuracy | Compression |
+```mermaid
+flowchart LR
+  IN["28×28 input"] --> C1["conv1 · 128ch\ncompressed"]
+  C1 --> P1["pool"]
+  P1 --> C2["conv2 · 192ch\ncompressed"]
+  C2 --> P2["pool"]
+  P2 --> C3["conv3 · 384ch\ncompressed"]
+  C3 --> P3["pool"]
+  P3 --> C4["conv4 · 128ch\ncompressed"]
+  C4 --> AP["adaptive pool"]
+  AP --> FC["fc1 + fc2\n~1.05M params\nuntouched"]
+  FC --> OUT["10 classes"]
+```
+
+| `--compression-ratio` | Baseline acc | Compressed acc | Δ accuracy | Conv compression |
 | --- | --- | --- | --- | --- |
-| `1.5` | 74.0% | 74.3% | +0.4 pp | 1.48× |
-| **`2.0`** | **74.0%** | **73.8%** | **−0.2 pp** | **1.95×** |
-| **`3.0`** | **74.6%** | **74.2%** | **−0.4 pp** | **2.85×** |
-| `4.0` | 73.2% | 70.8% | −2.4 pp | 3.81× |
-| `6.0` | 73.7% | 67.3% | −6.4 pp | 5.61× |
-| **`8.0`** | **74.0%** | **71.0%** | **−3.0 pp** | **7.12×** |
+| `1.5` | 88.9% | 88.8% | −0.1 pp | 1.50× |
+| **`2.0`** | **88.8%** | **88.3%** | **−0.4 pp** | **1.99×** |
+| **`3.0`** | **89.8%** | **88.5%** | **−1.3 pp** | **2.99×** |
+| `4.0` | 89.4% | 87.9% | −1.5 pp | 3.98× |
+| `6.0` | 89.4% | 87.7% | −1.8 pp | 5.99× |
+| **`8.0`** | **89.4%** | **86.8%** | **−2.6 pp** | **7.98×** |
+
+At `--compression-ratio 8.0` the conv stack shrinks **~8×** while the whole
+model drops only **~62%** of parameters because the FC head stays dense — the
+report separates both scopes so the numbers stay honest.
 
 Highlights:
 
-- **Near-lossless up to ~3×:** `--compression-ratio 3.0` shrinks the
-  convolutions **2.85×** while keeping accuracy within **−0.4 pp** of baseline.
-- **Aggressive compression:** `--compression-ratio 8.0` reaches **7.12×** for a
-  modest **−3.0 pp**, after fine-tuning recovers the initial drop.
+- **Near-lossless up to ~3×:** `--compression-ratio 3.0` hits **2.99×** on the
+  conv layers with only **−1.3 pp** accuracy loss (baseline **89.8%**).
+- **Aggressive compression:** `--compression-ratio 8.0` reaches **7.98×** on
+  convs for **−2.6 pp**, with fine-tuning recovering most of the post-factorization drop.
 
 Reproduce the sweet spot with:
 
 ```bash
 python examples/quickstart.py \
-  --dataset fashion-mnist --epochs 10 --ft-epochs 5 \
+  --model fashion-lenet --dataset fashion-mnist \
+  --epochs 10 --ft-epochs 5 \
   --train-size 10000 --test-size 4000 --compression-ratio 3.0
 ```
 
 > Fine-tuning matters: aggressive ratios drop sharply right after factorization
 > and recover most of the gap over a few fine-tune epochs, so always fine-tune
-> after compressing.
+> after compressing. Use `--model tinycnn` for a faster smoke run (~57k params).
 
 ## Contributing
 

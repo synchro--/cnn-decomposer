@@ -21,7 +21,7 @@ from tensorpress.config import FinetuneConfig
 class SweepRow:
     dataset: str
     method: str
-    ranks: float | str
+    compression_ratio: float | str
     baseline_epochs: int
     ft_epochs: int
     acc_before: float
@@ -39,7 +39,7 @@ def run_one(
     *,
     dataset: str,
     method: str,
-    ranks: float | str,
+    compression_ratio: float | str,
     baseline_epochs: int,
     ft_epochs: int,
     device: str,
@@ -54,10 +54,12 @@ def run_one(
     acc_before = evaluate(model, loaders["test"], device)
     params_before = sum(p.numel() for p in model.parameters())
 
+    auto = compression_ratio == "auto"
     cfg = CompressConfig(
         method=method,
         layers="all",
-        ranks=ranks,
+        ranks="auto",
+        compression_ratio=None if auto else float(compression_ratio),
         finetune=ft_epochs > 0,
         finetune_config=FinetuneConfig(
             epochs=max(ft_epochs, 1),
@@ -82,7 +84,7 @@ def run_one(
     return SweepRow(
         dataset=dataset,
         method=method,
-        ranks=ranks,
+        compression_ratio=compression_ratio,
         baseline_epochs=baseline_epochs,
         ft_epochs=ft_epochs,
         acc_before=acc_before,
@@ -102,9 +104,10 @@ def main() -> None:
     parser.add_argument("--datasets", nargs="+", default=["cifar10", "fashion-mnist"])
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
     parser.add_argument(
-        "--ranks",
+        "--compression-ratios",
         nargs="+",
-        default=["auto", "0.15", "0.25", "0.4", "0.55", "0.7", "0.85", "1.0"],
+        default=["auto", "1.5", "2", "3", "4", "6", "8", "12"],
+        help="N-fold size-reduction targets (>= 1), or 'auto' for the VBMF heuristic",
     )
     parser.add_argument("--baseline-epochs", nargs="+", type=int, default=[3, 5, 8])
     parser.add_argument("--ft-epochs", nargs="+", type=int, default=[0, 2, 5])
@@ -116,23 +119,24 @@ def main() -> None:
     if device == "cpu" and torch.backends.mps.is_available():
         device = "mps"
 
-    parsed_ranks: list[float | str] = []
-    for r in args.ranks:
-        parsed_ranks.append("auto" if r == "auto" else float(r))
+    parsed_ratios: list[float | str] = []
+    for r in args.compression_ratios:
+        parsed_ratios.append("auto" if r == "auto" else float(r))
 
     rows: list[SweepRow] = []
     for dataset in args.datasets:
         for baseline_epochs in args.baseline_epochs:
             for ft_epochs in args.ft_epochs:
-                for ranks in parsed_ranks:
+                for compression_ratio in parsed_ratios:
                     print(
-                        f"\n>>> {dataset} ranks={ranks} baseline={baseline_epochs} ft={ft_epochs}",
+                        f"\n>>> {dataset} compression_ratio={compression_ratio} "
+                        f"baseline={baseline_epochs} ft={ft_epochs}",
                         flush=True,
                     )
                     row = run_one(
                         dataset=dataset,
                         method=args.method,
-                        ranks=ranks,
+                        compression_ratio=compression_ratio,
                         baseline_epochs=baseline_epochs,
                         ft_epochs=ft_epochs,
                         device=device,

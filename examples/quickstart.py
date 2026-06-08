@@ -126,11 +126,11 @@ def evaluate(model: nn.Module, loader: DataLoader, device: str) -> float:
     return 100.0 * correct / max(total, 1)
 
 
-def parse_ranks(value: str) -> str | float:
-    """Parse CLI rank value into a TensorPress rank spec."""
+def parse_ranks(value: str) -> str | int:
+    """Parse CLI rank value into a TensorPress (manual) rank spec."""
     if value == "auto":
         return value
-    return float(value)
+    return int(value)
 
 
 def main() -> None:
@@ -138,7 +138,13 @@ def main() -> None:
     parser.add_argument("--dataset", default="cifar10", choices=supported_dataset_names())
     parser.add_argument("--list-datasets", action="store_true", help="list supported datasets and exit")
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
-    parser.add_argument("--ranks", default="auto", help="'auto' or a float ratio, for example 0.5")
+    parser.add_argument("--ranks", default="auto", help="manual rank spec: 'auto' or an integer")
+    parser.add_argument(
+        "--compression-ratio",
+        type=float,
+        default=None,
+        help="optional target N-fold size reduction (>= 1); overrides --ranks when set",
+    )
     parser.add_argument("--epochs", type=int, default=1, help="baseline training epochs")
     parser.add_argument("--ft-epochs", type=int, default=1, help="post-compression fine-tune epochs")
     parser.add_argument("--use-bn", action="store_true", help="add BatchNorm after factors")
@@ -160,9 +166,14 @@ def main() -> None:
         return
 
     device = resolve_device()
+    target = (
+        f"compression_ratio={args.compression_ratio}x"
+        if args.compression_ratio is not None
+        else f"ranks={args.ranks}"
+    )
     print(
         f"\nTensorPress quickstart: device={device} dataset={args.dataset} "
-        f"method={args.method} ranks={args.ranks}\n"
+        f"method={args.method} {target}\n"
     )
 
     print(f"Loading {args.dataset}...")
@@ -188,7 +199,8 @@ def main() -> None:
     cfg = CompressConfig(
         method=args.method,
         layers="all",
-        ranks=parse_ranks(args.ranks),
+        ranks="auto" if args.compression_ratio is not None else parse_ranks(args.ranks),
+        compression_ratio=args.compression_ratio,
         use_bn=args.use_bn,
         finetune=args.ft_epochs > 0,
         finetune_config=FinetuneConfig(
@@ -227,6 +239,7 @@ def main() -> None:
             "dataset": args.dataset,
             "method": args.method,
             "ranks": args.ranks,
+            "compression_ratio": args.compression_ratio,
             "epochs": args.epochs,
             "ft_epochs": args.ft_epochs,
             "use_bn": args.use_bn,

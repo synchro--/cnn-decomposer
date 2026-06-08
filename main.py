@@ -7,15 +7,15 @@ flow against a user-specified compression ratio:
 
 1. build a model
 2. train a baseline
-3. configure compression (``method`` + desired ``ratio``)
+3. configure compression (``method`` + desired ``compression_ratio``)
 4. compress (and optionally fine-tune)
 5. report and export
 
 Usage
 -----
-python main.py --ratio 0.5
-python main.py --method cpd --ratio 0.25 --epochs 2 --ft-epochs 1
-python main.py --dataset fashion-mnist --ratio 0.4
+python main.py --compression-ratio 2.0
+python main.py --method cpd --compression-ratio 4.0 --epochs 2 --ft-epochs 1
+python main.py --dataset fashion-mnist --compression-ratio 2.5
 """
 
 from __future__ import annotations
@@ -38,10 +38,10 @@ from tensorpress.config import FinetuneConfig
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TensorPress compression demo")
     parser.add_argument(
-        "--ratio",
+        "--compression-ratio",
         type=float,
-        default=0.5,
-        help="Target compression ratio in (0, 1]; e.g. 0.5 keeps roughly half the parameters",
+        default=2.0,
+        help="Target N-fold size reduction (>= 1); e.g. 2.0 makes layers ~2x smaller",
     )
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
     parser.add_argument("--dataset", default="cifar10", choices=supported_dataset_names())
@@ -62,7 +62,7 @@ def main() -> None:
     device = resolve_device()
     print(
         f"TensorPress demo  device={device}  dataset={args.dataset}  "
-        f"method={args.method}  ratio={args.ratio}\n"
+        f"method={args.method}  compression_ratio={args.compression_ratio}\n"
     )
 
     loaders, in_channels, num_classes = get_dataloaders(dataset=args.dataset)
@@ -75,12 +75,10 @@ def main() -> None:
     params_before = sum(p.numel() for p in model.parameters())
     print(f"\nBaseline:   acc={acc_before:.2f}%   params={params_before:,}")
 
-    # The float ``ranks=ratio`` is interpreted as a desired compression ratio
-    # (see ``CompressConfig.ranks`` in the docs).
     cfg = CompressConfig(
         method=args.method,
         layers="all",
-        ranks=args.ratio,
+        compression_ratio=args.compression_ratio,
         use_bn=args.use_bn,
         finetune=args.ft_epochs > 0,
         finetune_config=FinetuneConfig(
@@ -91,7 +89,7 @@ def main() -> None:
         ),
     )
 
-    print(f"\nCompressing with {args.method.upper()} to ratio={args.ratio}...")
+    print(f"\nCompressing with {args.method.upper()} to {args.compression_ratio}x...")
     result = Compressor(cfg).compress(
         model,
         dataloader={"train": loaders["train"], "val": loaders["val"]},
@@ -118,7 +116,7 @@ def main() -> None:
             "device": device,
             "dataset": args.dataset,
             "method": args.method,
-            "ratio": args.ratio,
+            "compression_ratio": args.compression_ratio,
             "epochs": args.epochs,
             "ft_epochs": args.ft_epochs,
             "use_bn": args.use_bn,

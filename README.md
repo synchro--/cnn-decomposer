@@ -45,9 +45,9 @@ from tensorpress import CompressConfig, Compressor
 model = MyModel()
 
 cfg = CompressConfig(
-    method="tucker",      # "tucker" or "cpd"
-    layers="all",         # "all", names, regex, or callable
-    ranks="auto",         # "auto", float target, or per-layer dict
+    method="tucker",        # "tucker" or "cpd"
+    layers="all",           # "all", names, regex, or callable
+    compression_ratio=4.0,  # target N-fold size reduction (>= 1); ~4x smaller
     use_bn=False,
     finetune=False,
 )

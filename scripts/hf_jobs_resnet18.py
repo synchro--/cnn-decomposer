@@ -61,7 +61,10 @@ def run_experiment(args: argparse.Namespace) -> dict:
     from tensorpress.config import FinetuneConfig
 
     device = resolve_device()
-    print(f"device={device} dataset={args.dataset} method={args.method} ranks={args.ranks}")
+    print(
+        f"device={device} dataset={args.dataset} method={args.method} "
+        f"compression_ratio={args.compression_ratio}"
+    )
 
     loaders, spec = get_vision_dataloaders(
         args.dataset,
@@ -118,11 +121,10 @@ def run_experiment(args: argparse.Namespace) -> dict:
     params_before = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"baseline acc={acc_before:.2f}% params={params_before:,}")
 
-    ranks: str | float = "auto" if args.ranks == "auto" else float(args.ranks)
     cfg = CompressConfig(
         method=args.method,
         layers=lambda name, module: "layer" in name and isinstance(module, nn.Conv2d),
-        ranks=ranks,
+        compression_ratio=args.compression_ratio,
         use_bn=False,
         finetune=args.ft_epochs > 0,
         finetune_config=FinetuneConfig(
@@ -152,7 +154,7 @@ def run_experiment(args: argparse.Namespace) -> dict:
             "device": device,
             "dataset": args.dataset,
             "method": args.method,
-            "ranks": args.ranks,
+            "compression_ratio": args.compression_ratio,
             "pretrained": args.pretrained,
             "head_epochs": args.head_epochs,
             "ft_epochs": args.ft_epochs,
@@ -218,7 +220,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TensorPress ResNet18 HF Jobs runner")
     parser.add_argument("--dataset", default="cifar10")
     parser.add_argument("--method", default="tucker", choices=["tucker", "cpd"])
-    parser.add_argument("--ranks", default="auto", help="'auto' or float ratio in (0, 1]")
+    parser.add_argument(
+        "--compression-ratio",
+        type=float,
+        default=8.0,
+        help="target N-fold size reduction (>= 1) for the compressed conv layers",
+    )
     parser.add_argument("--head-epochs", type=int, default=5)
     parser.add_argument("--ft-epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=32)

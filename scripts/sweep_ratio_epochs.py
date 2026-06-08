@@ -43,8 +43,12 @@ def run_one(
     baseline_epochs: int,
     ft_epochs: int,
     device: str,
+    train_size: int = 2048,
+    test_size: int = 1024,
 ) -> SweepRow:
-    loaders, in_channels, num_classes = get_dataloaders(dataset=dataset)
+    loaders, in_channels, num_classes = get_dataloaders(
+        dataset=dataset, train_size=train_size, test_size=test_size
+    )
     model = TinyCNN(input_channels=in_channels, num_classes=num_classes)
 
     t0 = time.time()
@@ -111,6 +115,8 @@ def main() -> None:
     )
     parser.add_argument("--baseline-epochs", nargs="+", type=int, default=[3, 5, 8])
     parser.add_argument("--ft-epochs", nargs="+", type=int, default=[0, 2, 5])
+    parser.add_argument("--train-size", type=int, default=2048)
+    parser.add_argument("--test-size", type=int, default=1024)
     args = parser.parse_args()
 
     import torch
@@ -140,6 +146,8 @@ def main() -> None:
                         baseline_epochs=baseline_epochs,
                         ft_epochs=ft_epochs,
                         device=device,
+                        train_size=args.train_size,
+                        test_size=args.test_size,
                     )
                     rows.append(row)
                     print(

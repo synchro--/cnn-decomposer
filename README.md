@@ -104,35 +104,37 @@ python -m pytest tests/test_datasets.py --run-dataset-tests --dataset-name cifar
 ## Example Results
 
 Tucker-2 compression of the quickstart `TinyCNN` on **Fashion-MNIST**
-(2,048 train / 1,024 test samples, 8 baseline epochs, 3 fine-tune epochs).
-The `--ranks` float is a target parameter-retention fraction in `(0, 1]`; the
-reported compression is the achieved parameter reduction.
+(10,000 train / 4,000 test samples, 10 baseline epochs, 5 fine-tune epochs).
+`--compression-ratio` is the requested N-fold size reduction for the compressed
+conv layers; the "Compression" column is the achieved reduction on those layers.
 
-| `--ranks` | Baseline acc | Compressed acc | Δ accuracy | Compression |
+| `--compression-ratio` | Baseline acc | Compressed acc | Δ accuracy | Compression |
 | --- | --- | --- | --- | --- |
-| `0.2` | 60.4% | 56.8% | −3.6 pp | 8.7× |
-| **`0.35`** | **60.5%** | **59.1%** | **−1.5 pp** | **9.8×** |
-| `0.5` | 60.4% | 58.8% | −1.7 pp | 8.9× |
-| `0.65` | 60.4% | 56.4% | −3.9 pp | 9.1× |
-| **`1.0`** | **58.7%** | **55.6%** | **−3.1 pp** | **12.0×** |
+| `1.5` | 74.0% | 74.3% | +0.4 pp | 1.48× |
+| **`2.0`** | **74.0%** | **73.8%** | **−0.2 pp** | **1.95×** |
+| **`3.0`** | **74.6%** | **74.2%** | **−0.4 pp** | **2.85×** |
+| `4.0` | 73.2% | 70.8% | −2.4 pp | 3.81× |
+| `6.0` | 73.7% | 67.3% | −6.4 pp | 5.61× |
+| **`8.0`** | **74.0%** | **71.0%** | **−3.0 pp** | **7.12×** |
 
 Highlights:
 
-- **Best accuracy-to-compression trade-off:** `--ranks 0.35` keeps **59.1%**
-  accuracy (only **−1.5 pp**) while shrinking the convolutions **9.8×**.
-- **Highest compression:** `--ranks 1.0` reaches **12.0×** at a modest
-  **−3.1 pp** accuracy cost.
+- **Near-lossless up to ~3×:** `--compression-ratio 3.0` shrinks the
+  convolutions **2.85×** while keeping accuracy within **−0.4 pp** of baseline.
+- **Aggressive compression:** `--compression-ratio 8.0` reaches **7.12×** for a
+  modest **−3.0 pp**, after fine-tuning recovers the initial drop.
 
 Reproduce the sweet spot with:
 
 ```bash
 python examples/quickstart.py \
-  --dataset fashion-mnist --epochs 8 --ft-epochs 3 --ranks 0.35
+  --dataset fashion-mnist --epochs 10 --ft-epochs 5 \
+  --train-size 10000 --test-size 4000 --compression-ratio 3.0
 ```
 
-> Fine-tuning matters: without it (`--ft-epochs 0`) the same `--ranks 0.5`
-> run drops from −1.7 pp to roughly −32 pp, so always fine-tune after
-> aggressive compression.
+> Fine-tuning matters: aggressive ratios drop sharply right after factorization
+> and recover most of the gap over a few fine-tune epochs, so always fine-tune
+> after compressing.
 
 ## Contributing
 

@@ -30,10 +30,10 @@ class CompressedModel:
         Per-epoch training loss if finetune=True, else None.
     backend : BaseBackend | None
         Used by ``export()``; may be None in tests.
-    requested_keep_fraction : float | None
-        The keep-fraction target requested via ``compression`` (or the deprecated
-        float ``ranks``), used to report requested-vs-realized. ``None`` for
-        ``"auto"`` or explicit integer ranks.
+    requested_compression_ratio : float | None
+        The N-fold compression target requested via ``compression_ratio``, used
+        to report requested-vs-realized. ``None`` for ``"auto"`` or explicit
+        manual ranks.
 
     Examples
     --------
@@ -53,7 +53,7 @@ class CompressedModel:
         trainable_params_after: int,
         finetune_history: list[float] | None = None,
         backend: Any = None,
-        requested_keep_fraction: float | None = None,
+        requested_compression_ratio: float | None = None,
     ) -> None:
         self.model = model
         self.layer_stats = layer_stats
@@ -61,7 +61,7 @@ class CompressedModel:
         self.trainable_params_after = trainable_params_after
         self.finetune_history = finetune_history
         self.backend = backend
-        self.requested_keep_fraction = requested_keep_fraction
+        self.requested_compression_ratio = requested_compression_ratio
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Forward pass — delegates to the underlying model."""
@@ -114,13 +114,8 @@ class CompressedModel:
 
     @property
     def subset_compression_ratio(self) -> float:
-        """Compression ratio over the compressed layers only."""
+        """Realized N-fold compression ratio over the compressed layers only."""
         return self.compressed_params_before / max(self.compressed_params_after, 1)
-
-    @property
-    def realized_keep_fraction(self) -> float:
-        """Fraction of parameters actually kept across the compressed layers."""
-        return self.compressed_params_after / max(self.compressed_params_before, 1)
 
     @property
     def untouched_params(self) -> int:
@@ -140,8 +135,8 @@ class CompressedModel:
         The summary separates two scopes so an untouched classifier/BN cannot
         silently hide strong per-layer compression:
 
-        - **compressed layers**: the layers actually factorized, and the keep
-          fraction realized there (versus the requested target, if any).
+        - **compressed layers**: the layers actually factorized, and the N-fold
+          compression realized there (versus the requested target, if any).
         - **whole model**: every trainable parameter, including untouched layers.
 
         Returns
@@ -155,8 +150,7 @@ class CompressedModel:
                 "params_before": self.compressed_params_before,
                 "params_after": self.compressed_params_after,
                 "compression_ratio": round(self.subset_compression_ratio, 3),
-                "realized_keep_fraction": round(self.realized_keep_fraction, 4),
-                "requested_keep_fraction": self.requested_keep_fraction,
+                "requested_compression_ratio": self.requested_compression_ratio,
             },
             "whole_model": {
                 "params_before": self.trainable_params_before,
@@ -166,17 +160,16 @@ class CompressedModel:
                 "untouched_params": self.untouched_params,
             },
         }
-        kept = f"{100.0 * self.realized_keep_fraction:.1f}%"
-        if self.requested_keep_fraction is not None:
-            kept += f" (requested {100.0 * self.requested_keep_fraction:.1f}%)"
+        realized = f"{self.subset_compression_ratio:.2f}x"
+        if self.requested_compression_ratio is not None:
+            realized += f" (requested {self.requested_compression_ratio:.2f}x)"
         lines = [
             "TensorPress comparison",
             "  compressed layers:",
             f"    count:            {len(self.layer_stats)}",
             f"    params before:    {self.compressed_params_before:,}",
             f"    params after:     {self.compressed_params_after:,}",
-            f"    compression:      {self.subset_compression_ratio:.2f}x",
-            f"    params kept:      {kept}",
+            f"    compression:      {realized}",
             "  whole model (includes untouched layers):",
             f"    params before:    {self.trainable_params_before:,}",
             f"    params after:     {self.trainable_params_after:,}",
@@ -195,12 +188,12 @@ class CompressedModel:
         Three clearly-separated scopes are shown so that a large untouched layer
         (e.g. a dense classifier) does not mask strong per-layer compression:
         each compressed layer with its chosen rank, the compressed-subset
-        aggregate (realized vs requested keep fraction), and the whole-model
+        aggregate (realized vs requested N-fold ratio), and the whole-model
         total with the count of untouched parameters.
         """
-        kept = f"{100.0 * self.realized_keep_fraction:.1f}%"
-        if self.requested_keep_fraction is not None:
-            kept += f" (req {100.0 * self.requested_keep_fraction:.1f}%)"
+        realized = f"{self.subset_compression_ratio:.2f}x"
+        if self.requested_compression_ratio is not None:
+            realized += f" (req {self.requested_compression_ratio:.2f}x)"
 
         try:
             from rich.console import Console
@@ -238,7 +231,7 @@ class CompressedModel:
             console = Console()
             console.print(table)
             console.print(
-                f"Compressed {len(self.layer_stats)} layer(s); kept {kept} of their params. "
+                f"Compressed {len(self.layer_stats)} layer(s) by {realized}. "
                 f"{self.untouched_params:,} param(s) in untouched layers "
                 f"(e.g. classifier/BN) dilute the whole-model ratio."
             )
@@ -262,7 +255,7 @@ class CompressedModel:
             )
             print("-" * 78)
             print(
-                f"Compressed {len(self.layer_stats)} layer(s); kept {kept} of their params. "
+                f"Compressed {len(self.layer_stats)} layer(s) by {realized}. "
                 f"{self.untouched_params:,} param(s) in untouched layers dilute the whole-model ratio."
             )
 

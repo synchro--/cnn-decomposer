@@ -152,45 +152,47 @@ class TuckerDecomposition(BaseDecomposition):
         log.debug("VBMF estimated Tucker ranks: %s", ranks)
         return ranks
 
-    def ranks_for_keep_fraction(self, layer: nn.Conv2d, keep: float) -> list[int]:
+    def solve_ranks(self, layer: nn.Conv2d, compression_ratio: float) -> list[int]:
         """
-        Solve for Tucker ranks ``[R_out, R_in]`` that keep ``keep`` of the params.
+        Solve for Tucker ranks ``[R_out, R_in]`` achieving ``compression_ratio``.
 
         A Tucker-2 conv has approximately ``S*R_in + R_in*R_out*Kh*Kw + R_out*T``
         parameters versus the original ``T*S*Kh*Kw``. We scale both ranks by a
         single factor ``alpha`` proportional to their mode sizes
         (``R_out = alpha*T``, ``R_in = alpha*S``), which reduces the budget
-        equation to a quadratic in ``alpha`` that we solve in closed form.
+        equation ``original / compressed = compression_ratio`` to a quadratic in
+        ``alpha`` that we solve in closed form.
 
         Parameters
         ----------
         layer : nn.Conv2d
             Input convolution layer.
-        keep : float
-            Target fraction of parameters to retain, in (0, 1].
+        compression_ratio : float
+            Target N-fold size reduction, ``>= 1``.
 
         Returns
         -------
         list[int]
             Tucker ranks ``[R_out, R_in]``.
         """
-        if not (0.0 < keep <= 1.0):
-            raise ValueError("keep fraction must be in range (0, 1]")
+        if compression_ratio < 1.0:
+            raise ValueError("compression_ratio must be >= 1")
 
         out_ch, in_ch, kh, kw = (int(v) for v in layer.weight.shape)
         spatial = kh * kw
 
-        # a*alpha^2 + b*alpha - c = 0, with R_out=alpha*out, R_in=alpha*in.
+        # a*alpha^2 + b*alpha - c = 0, with R_out=alpha*out, R_in=alpha*in,
+        # and compressed budget c = original / compression_ratio.
         a = float(in_ch * out_ch * spatial)
         b = float(in_ch * in_ch + out_ch * out_ch)
-        c = float(keep * out_ch * in_ch * spatial)
+        c = float(out_ch * in_ch * spatial) / compression_ratio
         alpha = (-b + math.sqrt(b * b + 4.0 * a * c)) / (2.0 * a)
 
         rank_out = max(1, min(out_ch, int(round(alpha * out_ch))))
         rank_in = max(1, min(in_ch, int(round(alpha * in_ch))))
         log.debug(
-            "Tucker keep=%.4f -> ranks=[%d, %d] (shape=%s)",
-            keep,
+            "Tucker compression_ratio=%.2fx -> ranks=[%d, %d] (shape=%s)",
+            compression_ratio,
             rank_out,
             rank_in,
             layer.weight.shape,

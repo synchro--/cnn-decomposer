@@ -31,8 +31,8 @@ def compress(
     *,
     method: str = "tucker",
     layers: str | list[str] | None = None,
-    ranks: str | int | float | list[int] | dict[str, Any] = "auto",
-    compression: float | None = None,
+    ranks: str | int | list[int] | dict[str, Any] = "auto",
+    compression_ratio: float | None = None,
     use_bn: bool = False,
     dataloader: Any | None = None,
     finetune: bool = False,
@@ -55,7 +55,7 @@ def compress(
         method=method,  # type: ignore[arg-type]
         layers=layers,
         ranks=ranks,  # type: ignore[arg-type]
-        compression=compression,
+        compression_ratio=compression_ratio,
         use_bn=use_bn,
         finetune=finetune,
         finetune_config=ft,

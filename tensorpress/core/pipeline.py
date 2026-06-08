@@ -22,23 +22,37 @@ def _resolve_ranks_list(
     layer: Any,
     decomp: BaseDecomposition,
 ) -> list[int]:
-    """Return ranks as a flat list of positive integers for normalization."""
-    keep = config.effective_keep_fraction()
-    if keep is not None:
-        return decomp.ranks_for_keep_fraction(layer, keep)
+    """Return ranks as a flat list of positive integers for normalization.
 
+    Per-layer precedence:
+
+    1. a manual ``ranks`` dict entry for this layer (highest priority);
+    2. a blanket ``compression_ratio`` target (algebraic ``solve_ranks``);
+    3. a blanket ``int``/``list`` manual rank;
+    4. ``"auto"`` (or a dict that does not cover this layer) -> ``estimate_ranks``.
+    """
     spec = config.ranks
-    if isinstance(spec, dict):
-        est = RankEstimator(spec).estimate(layer_name, layer)
-        return list(est)
-    if spec == "auto":
-        return decomp.estimate_ranks(layer)
+    ratio = config.effective_compression_ratio()
+
+    # 1. per-layer manual override.
+    if isinstance(spec, dict) and layer_name in spec:
+        return list(RankEstimator(spec).estimate(layer_name, layer))
+
+    # 2. blanket compression-ratio target.
+    if ratio is not None:
+        return decomp.compute_ranks(layer, compression_ratio=ratio)
+
+    # 3. blanket manual int/list.
     if isinstance(spec, bool):
         raise ValueError(f"unsupported ranks configuration: {spec!r}")
     if isinstance(spec, int):
         return [spec]
     if isinstance(spec, (list, tuple)):
         return list(spec)
+
+    # 4. auto estimate (also covers a dict with no entry for this layer).
+    if spec == "auto" or isinstance(spec, dict):
+        return decomp.compute_ranks(layer)
     raise ValueError(f"unsupported ranks configuration: {spec!r}")
 
 
@@ -92,5 +106,5 @@ def run_pipeline(
         trainable_params_after=after,
         finetune_history=history,
         backend=backend,
-        requested_keep_fraction=config.effective_keep_fraction(),
+        requested_compression_ratio=config.effective_compression_ratio(),
     )

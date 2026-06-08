@@ -58,4 +58,16 @@ class Compressor:
 
         selector = LayerSelector(cfg.layers)
         selected = selector.select(model)
+
+        # Convenience: when the user gives a per-layer ranks dict but no explicit
+        # layer selection and no blanket ratio, treat the dict keys as the
+        # selection so only those layers are compressed (others stay untouched).
+        if (
+            cfg.layers is None
+            and isinstance(cfg.ranks, dict)
+            and cfg.compression_ratio is None
+        ):
+            keys = set(cfg.ranks)
+            selected = [(name, layer) for name, layer in selected if name in keys]
+
         return run_pipeline(model, cfg, self._backend, self._decomp, dataloader, selected)

@@ -144,41 +144,47 @@ class CPDecomposition(BaseDecomposition):
         log.debug("VBMF estimated CP rank: %d", rank)
         return [max(int(rank), 1)]
 
-    def ranks_for_keep_fraction(self, layer: nn.Conv2d, keep: float) -> list[int]:
+    def solve_ranks(self, layer: nn.Conv2d, compression_ratio: float) -> list[int]:
         """
-        Solve for the CP rank that keeps ``keep`` fraction of the layer params.
+        Solve for the CP rank achieving an N-fold ``compression_ratio``.
 
         For a CP-factorized conv the parameter count is approximately
         ``R * (S + Kh + Kw + T)`` (the two pointwise plus two depthwise convs),
-        while the original conv has ``T * S * Kh * Kw`` parameters. Setting their
-        ratio to ``keep`` and solving for ``R`` gives the returned rank.
+        while the original conv has ``T * S * Kh * Kw`` parameters. Setting
+        ``original / compressed = compression_ratio`` and solving for ``R`` gives
+        the returned rank.
 
         Notes
         -----
         Because CP's per-rank cost ``(S + Kh + Kw + T)`` is small relative to the
-        dense kernel, hitting a high keep fraction requires a large rank (and a
-        correspondingly expensive PARAFAC fit). Smaller ``keep`` values yield
-        smaller ranks and far lower decomposition memory/time.
+        dense kernel, a *low* ratio (close to 1x) requires a large rank (and a
+        correspondingly expensive PARAFAC fit). Larger ratios yield smaller ranks
+        and far lower decomposition memory/time.
 
         Parameters
         ----------
         layer : nn.Conv2d
             Input convolution layer.
-        keep : float
-            Target fraction of parameters to retain, in (0, 1].
+        compression_ratio : float
+            Target N-fold size reduction, ``>= 1``.
 
         Returns
         -------
         list[int]
             CP rank in ``[R]`` form.
         """
-        if not (0.0 < keep <= 1.0):
-            raise ValueError("keep fraction must be in range (0, 1]")
+        if compression_ratio < 1.0:
+            raise ValueError("compression_ratio must be >= 1")
 
         out_ch, in_ch, kh, kw = (int(v) for v in layer.weight.shape)
         original = out_ch * in_ch * kh * kw
         per_rank = in_ch + kh + kw + out_ch
-        rank = int(round(keep * original / max(per_rank, 1)))
+        rank = int(round(original / (compression_ratio * max(per_rank, 1))))
         rank = max(rank, 1)
-        log.debug("CP keep=%.4f -> rank=%d (shape=%s)", keep, rank, layer.weight.shape)
+        log.debug(
+            "CP compression_ratio=%.2fx -> rank=%d (shape=%s)",
+            compression_ratio,
+            rank,
+            layer.weight.shape,
+        )
         return [rank]

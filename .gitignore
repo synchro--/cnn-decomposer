@@ -23,6 +23,7 @@ compressed_*.pt
 
 # tensorboard logs 
 *.tf 
+*.tfevents*
 
 
 # Distribution / packaging
